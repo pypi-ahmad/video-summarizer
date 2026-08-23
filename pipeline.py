@@ -78,9 +78,9 @@ def _extract_request_id(result: dict | str) -> str:
 
 
 def _extract_status(result: dict | str) -> tuple[str, str | None]:
-    if isinstance(result, dict):
-        return result.get("status", "UNKNOWN"), result.get("error")
-    text = str(result)
+    if isinstance(result, dict) and "status" in result:
+        return result["status"], result.get("error")
+    text = json.dumps(result) if isinstance(result, dict) else str(result)
     for candidate in ("COMPLETED", "FAILED", "RUNNING", "UNKNOWN"):
         if candidate in text.upper():
             return candidate, text if candidate == "FAILED" else None
