@@ -54,9 +54,10 @@ altered Markdown from exposing unrelated local files through Streamlit or ZIP do
 
 ## Why retrieval uses Qdrant
 
-Sending an entire long transcript with every question wastes context and makes relevant
-details harder for a chat model to identify. Ask instead divides the notes along
-Adversal's chapter structure, embeds those chunks, and retrieves a small evidence set.
+Sending an entire transcript and every frame with each question wastes context. Ask
+instead divides notes along Adversal's chapters and embeds both those chunks and compact
+frame descriptions. It retrieves text and visual evidence separately, then sends only
+the selected frame pixels to the model.
 
 Qdrant provides durable vector search without requiring a separate service for the
 local desktop target. One shared collection stores all completed videos, while a
@@ -66,7 +67,15 @@ replace only their own points.
 
 Retrieval narrows the evidence; it does not guarantee truth. The final answer is still
 model-generated, so the UI exposes source headings, timestamps when available,
-similarity scores, and full notes for verification.
+similarity scores, frame thumbnails, and full notes for verification.
+
+## Why visual indexing is explicit
+
+Describing every frame invokes a paid multimodal model. **Build visual index** makes
+that cost visible, saves each caption immediately, and lets an interrupted build resume.
+If the selected provider rejects image input, the preserved captions remain and the app
+still supports text-only Ask and Create. Captions improve retrieval; the final model also
+receives the retrieved pixels so it can verify visual details directly.
 
 ## Why embeddings do not follow the chat selector
 
@@ -91,7 +100,7 @@ Durable state lives under `runs/`:
 Interactive state lives in Streamlit session state:
 
 - the active job pointer;
-- generated document caches; and
+- generated document caches keyed by request, provider, and visual-evidence hash; and
 - Ask chat history.
 
 This split makes expensive source processing and indexing resumable without turning the

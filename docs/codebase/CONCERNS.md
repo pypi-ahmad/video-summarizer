@@ -14,7 +14,7 @@
 
 | Debt item | Why it exists | Where | Risk if ignored | Suggested fix |
 |-----------|---------------|-------|-----------------|---------------|
-| Partial exception handling | Adversal errors handled; file/LLM/Qdrant errors mostly left to Streamlit | `app.py`, `modes.py`, `vector_store.py` | Raw failure pages and poor recovery | Catch errors at owning UI boundary with provider/job context |
+| Partial exception handling | Adversal and main multimodal workflow errors are handled; file and Qdrant errors may still reach Streamlit | `app.py`, `modes.py`, `vector_store.py` | Raw failure pages for remaining paths | Catch remaining errors at their owning UI boundary with provider/job context |
 | Runtime storage has manual cleanup only | Local and private-hosted workflows retain completed artifacts | `runs/`, `/data/runs`, `app.py` | Disk or bucket growth | Keep manual cleanup for one trusted user; define retention before broader use |
 
 ### 3) Security Concerns

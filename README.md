@@ -225,8 +225,9 @@ useful scenes. This project keeps the expensive video pass separate from later r
 
 1. Adversal extracts structured chapters and representative visual frames.
 2. The app keeps those artifacts as the source you can inspect.
-3. Qdrant retrieves only relevant chapters for questions.
-4. A selected LLM turns the notes into a document for the chosen task.
+3. An explicit visual-index step describes the safe frames with the selected model.
+4. Qdrant retrieves relevant chapters and frame descriptions for each task.
+5. The selected model receives both that context and the retrieved frame pixels.
 
 This gives each video one durable workspace instead of a separate pipeline for every
 output.
@@ -237,7 +238,7 @@ output.
 | --- | --- |
 | **Study notes** | Original chaptered Markdown with timestamps and referenced screenshots |
 | **Meeting/webinar summary** | Two compact bullet sections: Decisions and Action Items, including owners when identified |
-| **Searchable knowledge base** | Grounded answers from the five nearest video chunks, with chapter headings, timestamps, and scores |
+| **Searchable knowledge base** | Grounded answers from five text chunks and up to three relevant frames, with citations and visible sources |
 | **Content triage** | Three to five summary bullets plus a watch-in-full, skim, or skip recommendation with a reason |
 | **Blog post** | Title, opening hook, preserved chapter body and screenshots, and conclusion |
 | **Quiz and flashcards** | Six multiple-choice questions, four short-answer questions, an explained answer key, and fifteen flashcards |
@@ -282,22 +283,23 @@ The completed Adversal result appears directly before any LLM summary:
 
 ### Searchable video knowledge base
 
-The **Ask** view turns completed notes into persistent video RAG:
+The **Ask** view turns completed notes and frames into persistent multimodal video RAG:
 
 1. Notes are split along Adversal chapter separators and headings into chunks targeting
    at most 1,500 characters.
-2. OpenAI `text-embedding-3-small` embeds each chunk.
-3. Qdrant stores deterministic points under `runs/qdrant` with heading, approximate
-   timestamp, text, notes hash, model, and active request ID.
-4. Each question retrieves the five nearest chunks with a mandatory filter for the
-   current video.
-5. The selected chat model answers only from those excerpts and is instructed to say
-   when they do not contain the answer.
+2. **Build visual index** explicitly asks the selected backend to describe every safe
+   Adversal key/requested frame. Each successful description is saved immediately in
+   `visual-evidence.json`, so interrupted work can resume.
+3. OpenAI `text-embedding-3-small` embeds text chunks and frame descriptions into the
+   same collection; Qdrant labels each point as `text` or `frame`.
+4. Each question retrieves five text chunks and up to three frames for the current video.
+5. The selected model receives the retrieved text, descriptions, and actual frame pixels.
 
-Answers include an expandable **Sources** list with chapter headings, timestamps when
-available, and cosine scores. **Full notes** remains available beside the chat so users
-can verify model output. Indexing is idempotent for unchanged notes; changed notes
-replace only that video's points.
+Answers include an expandable **Sources** list with text citations and retrieved frame
+thumbnails, captions, timestamps, and scores. Text-only Ask remains available if no
+visual index exists or the selected provider rejects image input.
+Turn off **Use visual evidence in Ask and Create** at any time to keep the persisted
+captions while running the current task from text only.
 
 > [!NOTE]
 > Ask always requires `OPENAI_API_KEY` for embeddings. Agnes or Gemini may answer the
@@ -308,12 +310,14 @@ replace only that video's points.
 The **Create** view offers seven grounded transformations listed in
 [What you can create](#what-you-can-create). Every generated document:
 
-- uses the completed Adversal notes rather than the raw video;
+- uses the completed Adversal notes and up to four retrieved frame pixels when a visual
+  index is available;
 - exposes the source notes in an expander for verification;
 - renders supported local screenshots where the workflow preserves image references;
 - downloads as a workflow-specific Markdown file; and
-- is cached by `(request_id, selected_backend)` so Streamlit reruns do not repeat paid
-  calls.
+- starts only after an explicit **Generate** click; and
+- is cached by `(request_id, selected_backend, visual_evidence_hash)` so reruns do not
+  repeat paid calls or reuse stale visual context.
 
 Notes up to 50,000 characters are sent to final generation directly. Longer notes are
 condensed in batches of at most 30,000 characters until they fit. Blog, SOP, and FAQ
@@ -584,8 +588,9 @@ video-summarizer/
 ├── adversal_client.py        # MCP adapter for adversal-cli
 ├── artifacts.py              # Safe frame discovery and ZIP/OKF exports
 ├── modes.py                  # Search and seven generated-document workflows
-├── vector_store.py           # Persistent, active-video Qdrant retrieval
-├── llm.py                    # Chat-provider dispatch and OpenAI embeddings
+├── visual_evidence.py        # Safe, resumable frame-caption manifest
+├── vector_store.py           # Persistent text/frame Qdrant retrieval
+├── llm.py                    # Multimodal provider dispatch and OpenAI embeddings
 ├── observability.py          # Terminal/file logging and secret redaction
 ├── launch.cmd                # Canonical Windows bootstrap and launcher
 ├── Dockerfile                # Private Hugging Face runtime image
@@ -608,7 +613,7 @@ uv run pytest -q
 The current suite covers Adversal response contracts and connection reuse, focused-job
 compatibility, filesystem containment, export safety, provider contracts, cache behavior,
 long-note reduction, Qdrant filtering and idempotency, concurrent job persistence, and
-logging redaction/rotation. It currently contains 31 focused tests. External Adversal and
+logging redaction/rotation. It currently contains 34 focused tests. External Adversal and
 model services are not called during tests.
 
 For module ownership and safe change paths, read the

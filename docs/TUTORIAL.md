@@ -109,36 +109,39 @@ useful visual changes.
 ## 4. Ask a grounded question
 
 1. Open **Ask**.
-2. Wait while the app builds the searchable index.
-3. Ask a question whose answer appears in the video, such as:
+2. Select **Build visual index**. The selected backend describes each frame and saves
+   every successful caption, so interrupted work can resume.
+3. Wait while the app builds the searchable text-and-frame index.
+4. Ask a question whose answer appears in the video, such as:
 
    ```text
    What are the three main recommendations in this video?
    ```
 
-4. Expand **Sources** under the answer.
+5. Expand **Sources** under the answer to inspect text citations and frame thumbnails.
 
-The app embeds chapter-aware chunks with OpenAI `text-embedding-3-small`, stores them
-under `runs/qdrant`, retrieves the five nearest chunks for the active request, and asks
-the selected chat model to answer only from those excerpts. A similarity score is not
-proof, so verify important answers against the notes or original video.
+The app embeds chapter-aware chunks and frame descriptions, retrieves five text chunks
+and up to three frames, then sends the retrieved frame pixels to the selected model.
+A similarity score is not proof, so verify important answers against the notes or video.
 
 **Checkpoint:** the answer includes chapter-based grounding, and **Sources** lists up
-to five retrieved headings with timestamps when available and similarity scores.
+to five text headings plus three frame thumbnails with timestamps, captions, and
+similarity scores when available.
 
 ## 5. Create a reusable document
 
-1. Open **Create**.
+1. Open **Create**. It shares the same visual index with Ask.
 2. Select **Quiz and flashcards** or another output.
-3. Review the generated Markdown and its source-notes expander.
-4. Select **Download as Markdown**.
-5. Select **Download all**. The ZIP now includes this cached document without another
+3. Select **Generate** to start the paid model call. Up to four relevant frame pixels
+   accompany the notes when a visual index exists.
+4. Review the generated Markdown and its source-notes expander.
+5. Select **Download as Markdown**.
+6. Select **Download all**. The ZIP now includes this cached document without another
    model call.
 
-The app caches the generated document for this browser session by request ID and
-selected backend. Switching backends creates another version, but does not process the
-video again. Download filenames use the safe original video stem followed by the output
-type.
+The app caches the document by request ID, selected backend, and visual-evidence hash.
+Switching backends or rebuilding visual evidence creates another version without
+processing the video again.
 
 For the quiz workflow, confirm that the document contains ten questions, a separate
 answer key, and fifteen flashcards. Those counts are part of the workflow contract.

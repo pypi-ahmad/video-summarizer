@@ -5,12 +5,16 @@ flowchart LR
     cli --> adversal["Adversal backend<br/>remote video analysis"]
     adversal --> files[("Job artifacts<br/>Markdown · key + exact frames")]
     files --> workspace["Reusable workspace<br/>Notes · Frames · Ask · Create"]
-    workspace --> qdrant[("Qdrant<br/>active-video vectors")]
-    workspace --> providers["OpenAI · Agnes · Gemini<br/>generation + embeddings"]
+    workspace --> evidence[("Visual evidence manifest<br/>resumable frame captions")]
+    workspace --> qdrant[("Qdrant<br/>text + frame-description vectors")]
+    workspace --> providers["OpenAI · Agnes · Gemini<br/>caption + multimodal reasoning"]
+    evidence --> qdrant
+    qdrant --> workspace
+    providers --> evidence
 
     classDef focal fill:#fff0e9,stroke:#eb6c36,color:#2d3142,stroke-width:2px
     classDef store fill:#eef0f4,stroke:#4f5d75,color:#2d3142
     classDef external fill:#f8f8f8,stroke:#7a8399,color:#2d3142,stroke-dasharray:4 3
     class app,workspace focal
-    class files,qdrant store
+    class files,evidence,qdrant store
     class adversal,providers external

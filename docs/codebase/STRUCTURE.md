@@ -10,8 +10,9 @@
 | `adversal_client.py` | Process-wide MCP stdio adapter with one worker thread, serialized request queue, and reusable `adversal-cli` session | `_MCPConnection`, `_call_tool()`, public wrapper functions |
 | `pipeline.py` | Job model, JSON persistence, polling, result loading and image-aware Markdown rendering | `Job`, `_save_job()`, `render_job_progress()` |
 | `artifacts.py` | Safe frame discovery, portable filenames, native/OKF exports, and Download All packaging | `download_filename()`, `build_all_downloads_bundle()` |
-| `modes.py` | Qdrant chunking/chat, seven generated outputs, and active-backend cache discovery | `CREATE_RENDERERS`, `cached_generated_documents()` |
-| `vector_store.py` | Persistent local Qdrant indexing and request-filtered search | `index_video()`, `search_video()` |
+| `modes.py` | Multimodal Qdrant chat, seven generated outputs, visual-index controls, and cache discovery | `render_visual_index_controls()`, `CREATE_RENDERERS` |
+| `visual_evidence.py` | Safe frame discovery, resumable caption manifest, evidence hashes, and provider image inputs | `build_evidence()`, `load_evidence()` |
+| `vector_store.py` | Persistent text/frame Qdrant indexing and request-filtered search | `index_video()`, `search_video_evidence()` |
 | `llm.py` | OpenAI-compatible and Gemini provider dispatch; OpenAI embeddings | `LLM_OPTIONS`, `chat()`, `embed()` |
 | `observability.py` | Central terminal and rotating-file logging with secret redaction | `configure_logging()`, `log_failure()` |
 | `Dockerfile` | Hugging Face-compatible Python 3.13/uv/FFmpeg image | image stages and runtime command |
@@ -40,8 +41,9 @@
 | `pipeline.py` | Shared job lifecycle and local result files | Provider-specific LLM prompts |
 | `artifacts.py` | Adversal artifact parsing and portable exports | UI routing or remote service calls |
 | `modes.py` | Generated-output prompts, chunking, RAG chat and presentation | MCP session construction or Qdrant lifecycle details |
+| `visual_evidence.py` | Safe frame discovery, durable captions, evidence hashes, and trusted image inputs | Streamlit presentation or vector queries |
 | `vector_store.py` | Qdrant collection, point payload and filtering policy | Streamlit presentation or MCP transport |
-| `llm.py` | LLM clients, model selection and embeddings | Streamlit state or job persistence |
+| `llm.py` | Multimodal LLM clients, model selection and embeddings | Streamlit state or job persistence |
 | `observability.py` | Logging configuration, sanitization, and failure metadata | User content or business workflows |
 
 These boundaries describe the current code. The project does not enforce them with a
@@ -61,6 +63,8 @@ package system.
 - `app.py`
 - `pipeline.py`
 - `modes.py`
+- `visual_evidence.py`
+- `vector_store.py`
 - `adversal_client.py`
 - `llm.py`
 - `observability.py`

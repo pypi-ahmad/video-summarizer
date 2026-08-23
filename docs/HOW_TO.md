@@ -214,17 +214,23 @@ history, and unreferenced files.
 
 ## Search the active video
 
-1. Open **Ask** and wait for indexing.
-2. Enter a question about the active video.
-3. Expand **Sources** to inspect headings, approximate timestamps, and scores.
-4. Open **Full notes** when the retrieved evidence is insufficient.
+1. Open **Ask**.
+2. Select **Build visual index** to describe every safe frame with the active backend.
+   The app saves each caption immediately, so the same action resumes interrupted work.
+3. Enter a question about the active video.
+4. Expand **Sources** to inspect text citations and frame thumbnails, captions,
+   approximate timestamps, and scores.
+5. Open **Full notes** when the retrieved evidence is insufficient.
 
-Indexing is idempotent for an unchanged request and notes hash. Search always applies
-the active request ID as a Qdrant payload filter.
+Qdrant indexes chapter text plus available frame descriptions. Each question retrieves
+up to five text chunks and three frames, then sends the actual retrieved pixels to the
+selected model. Search always filters on the active request ID. If a backend rejects
+images, switch backend and resume, or turn off **Use visual evidence in Ask and Create**
+to continue text-only without deleting saved captions.
 
 ## Create a derived document
 
-Open **Create** and choose one of these outputs:
+Open **Create**, optionally build the visual index, and choose one of these outputs:
 
 - Meeting/webinar summarizer
 - Content triage
@@ -234,9 +240,10 @@ Open **Create** and choose one of these outputs:
 - Interview insight pack
 - FAQ/help-center article
 
-Each output uses the completed notes, appears with the source notes, and can be
-downloaded as Markdown. Notes longer than 50,000 characters are first condensed in
-bounded batches. Image-oriented outputs preserve supported Markdown image references.
+Select **Generate** to start the paid call. Each output uses the completed notes and,
+when available, retrieves up to four relevant frames and sends their pixels to the
+selected model. Notes longer than 50,000 characters are first condensed in bounded
+batches. Image-oriented outputs preserve supported Markdown image references.
 After generation, the document is also included in **Download all** while that job and
 backend remain cached in the browser session.
 

@@ -138,12 +138,27 @@ but does not remove the persisted job or files.
 | --- | --- |
 | Notes | Source Markdown, metrics, rendered referenced images, and three downloads |
 | Key frames | Referenced and explicitly requested safe local images, 12 per page in three columns |
-| Ask | Active-video Qdrant retrieval, chat answer, sources, and full notes |
-| Create | One of seven generated Markdown documents |
+| Ask | Five text and up to three frame matches, multimodal answer, visible sources, and full notes |
+| Create | One of seven documents using notes and up to four retrieved frames |
 
 Only one video is active in a browser session. **Process another video** clears that
 selection; it does not delete the job. **Download all** remains visible beside the
 workspace title in every view.
+
+### Visual-index controls
+
+Ask and Create expose the same controls whenever safe Adversal frames exist:
+
+| Control | Behavior |
+| --- | --- |
+| Build visual index | Describes frames without existing current captions using the selected backend |
+| Rebuild visual index | Re-describes every frame after an index is complete |
+| Use visual evidence in Ask and Create | Includes caption retrieval and actual frame pixels when enabled; leaves the manifest intact when disabled |
+
+Each successful caption is persisted immediately, so a failed or interrupted build can
+resume. A caption record includes the safe relative path, alt text, chapter, timestamp,
+content hash, caption, provider, and model. Missing, changed, or path-unsafe images are
+discarded when the manifest is loaded.
 
 ## Output contracts
 
@@ -178,8 +193,9 @@ frontmatter, source metadata, draft status, and generation metadata.
 | Interview insight pack | `<stem>_interview_insights.md` |
 | FAQ/help-center article | `<stem>_faq_article.md` |
 
-Each document is cached in the session by `(request_id, selected_backend)`. Source notes at or
-below 50,000 characters go directly to the final prompt. Longer notes are condensed in
+Each document starts after an explicit Generate click and is cached by
+`(request_id, selected_backend, visual_evidence_hash)`. Source notes at or below 50,000
+characters go directly to the final prompt. Longer notes are condensed in
 batches of at most 30,000 characters until they fit the final generation step.
 
 ## Qdrant retrieval
@@ -188,14 +204,16 @@ batches of at most 30,000 characters until they fit the final generation step.
 | --- | --- |
 | Collection | `video_chunks_text_embedding_3_small_v1` |
 | Distance | Cosine |
-| Default result count | 5 |
+| Default result count | 5 text chunks and 3 frames for Ask; up to 4 frames for Create |
 | Required filter | Payload `request_id` equals the active job |
-| Point identity | Deterministic UUID derived from request ID, notes hash, and chunk index |
-| Idempotency | Matching request ID, notes hash, model, and chunk count skips re-indexing |
+| Point kinds | `text` and caption-derived `frame` points in one embedding space |
+| Point identity | Deterministic UUID derived from request ID, evidence hash, kind, and index |
+| Idempotency | Matching request ID, notes hash, evidence hash, model, and point count skips re-indexing |
 
 Chunks are built from Adversal chapter separators and headings with a target maximum of
 1,500 characters. Payloads include source, heading, approximate timestamp, text, chunk
-index, notes hash, and embedding model. Changed notes replace only that request's points.
+index, notes hash, evidence hash, kind, optional safe image path, and embedding model.
+Frame captions persist in each job's `visual-evidence.json`.
 
 ## Local storage
 
@@ -206,6 +224,7 @@ runs/
 └── <timestamp>_<uuid>_<video-slug>/
     ├── <uploaded-video>       # uploads only
     ├── notes.md
+    ├── visual-evidence.json   # after visual indexing
     ├── <Adversal images>
     └── requested_frames/      # only when exact timestamps were requested
 ```

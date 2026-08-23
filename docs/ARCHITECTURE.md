@@ -3,9 +3,9 @@
 Architecture material is organized by reader intent:
 
 - [Explanation](./EXPLANATION.md) discusses why the application uses a process-once
-  workspace, artifact-first and aggregate downloads, Qdrant retrieval, two persistence
-  lifetimes, and a trusted single-process deployment model for local and private Docker
-  execution.
+  workspace, artifact-first and aggregate downloads, resumable visual captions,
+  multimodal Qdrant retrieval, two persistence lifetimes, and a trusted single-process
+  deployment model for local and private Docker execution.
 - [Reference](./REFERENCE.md) records exact runtime contracts, model settings, Qdrant
   behavior, storage paths, commands, and limits.
 - [Codebase architecture](./codebase/ARCHITECTURE.md) maps the implementation layers,

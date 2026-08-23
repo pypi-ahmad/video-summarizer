@@ -21,7 +21,7 @@ Streamlit widget -> local upload or public URL -> adversal-cli over MCP stdio
 3. `pipeline.submit_job()` calls `adversal_client.process_video()` through the process-wide worker queue, receives a parsed request ID, creates a `Job`, and persists it in `runs/jobs.json`.
 4. `pipeline.render_job_progress()` polls `check_video_status()` every 8 seconds through `st.fragment` and the same MCP session; terminal or unknown status is persisted and triggers rerender.
 5. Completed jobs expose Notes, Key frames, Ask, and Create. `modes.CREATE_RENDERERS` selects one of seven generated outputs, and the workspace header packages core and already-cached outputs through Download All.
-6. Ask embeds chapter-aware chunks with OpenAI and stores/searches them in local Qdrant with a request-ID filter.
+6. An explicit action captions safe frames and persists a resumable manifest. Ask embeds chapter chunks and frame descriptions, retrieves both from Qdrant, and sends relevant pixels to the selected model.
 7. `llm.chat()` dispatches grounded prompts to OpenAI, Agnes through the OpenAI-compatible client, or Gemini.
 
 Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED` becomes `AdversalAuthRequiredError`; `app.py` sets session state, shows an authentication banner, invokes browser OAuth, and clears the banner only after an `AUTHENTICATED` response. An `AUTHENTICATION FAILED` response remains visible as an error.
@@ -38,8 +38,9 @@ again.
 | Presentation/orchestration (`app.py`) | Widgets, active workspace routing, destructive-run confirmation | MCP protocol and provider SDK construction | `app.py` |
 | Workflow/persistence (`pipeline.py`) | `Job`, status polling, local JSON/file paths, common rendering | Mode-specific prompts and provider credentials | `pipeline.py` |
 | Artifact layer (`artifacts.py`) | Safe frame resolution, portable filenames, native/OKF exports, and Download All packaging | UI state or remote service calls | `artifacts.py` |
+| Visual-evidence layer (`visual_evidence.py`) | Safe frame discovery, resumable caption manifests, evidence hashes, and provider-ready image inputs | UI rendering or vector queries | `visual_evidence.py` |
 | Feature layer (`modes.py`) | Prompts, chunking, RAG chat, generated-output UI, and active-backend cache discovery | Adversal transport | `modes.py` |
-| Vector store (`vector_store.py`) | Qdrant collection, indexing, payload filtering and retrieval | Chat generation or Streamlit UI | `vector_store.py` |
+| Vector store (`vector_store.py`) | Qdrant text/frame points, indexing, payload filtering and retrieval | Chat generation or Streamlit UI | `vector_store.py` |
 | Adversal adapter (`adversal_client.py`) | MCP subprocess/session, tool calls, tool-error translation | Streamlit rendering | `adversal_client.py` |
 | LLM adapter (`llm.py`) | Environment-backed clients, model dispatch, embeddings | Job/session persistence | `llm.py` |
 | Observability (`observability.py`) | Rerun-safe terminal/file logging, rotation, levels, and secret redaction | User content or secret persistence | `observability.py` |
@@ -49,7 +50,7 @@ again.
 
 | Pattern | Where found | Why it exists |
 |---------|-------------|---------------|
-| Adapter | `adversal_client.py`, `llm.py` | Isolates MCP and provider SDK details from UI/features |
+| Adapter | `adversal_client.py`, `llm.py` | Isolates MCP and multimodal provider SDK details from UI/features |
 | Strategy table | `llm._DISPATCH`, `modes.CREATE_RENDERERS` | Selects provider or output behavior without branching chains |
 | Data transfer object | `pipeline.Job`, `modes.Chunk`, `llm.LLMOption` | Carries persisted job, retrieval and provider data |
 | Streamlit session cache | Generated documents, index-ready markers and chats in `modes.py` | Preserves generated state across reruns for one browser session |

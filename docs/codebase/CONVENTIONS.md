@@ -31,7 +31,9 @@
 
 - Integration layer: `AdversalAuthRequiredError` separates authentication from general `AdversalError`; invalid local argument combinations raise `ValueError`.
 - UI layer: expected Adversal errors are caught and displayed with `st.error`; authentication sets session state and reruns.
-- LLM SDK errors, malformed persisted JSON, missing result files and Qdrant failures currently propagate to Streamlit.
+- Visual-index, Ask, and Create provider failures are caught at their owning UI boundary
+  and show recovery guidance without exposing prompts. Missing result files and Qdrant
+  failures still propagate to Streamlit; malformed visual manifests are logged and ignored.
 - Logging: modules use child loggers from `observability.get_logger()` and metadata-only event names; setup is idempotent across Streamlit reruns.
 - Sensitive data: API keys are read from environment or gitignored `.env`. The logging filter redacts known key values and common token formats; handled failures record exception types without exception messages or user content.
 - Runtime verbosity uses `VIDEO_SUMMARIZER_LOG_LEVEL`; rotating logs use 5 MiB files with three backups. Metrics and tracing are not configured.

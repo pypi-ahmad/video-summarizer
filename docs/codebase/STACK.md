@@ -20,9 +20,9 @@ The versions below came from `uv tree --depth 1` on 2026-08-23.
 | Streamlit | 1.62.0 | Web UI, session state, fragments, chat, rendering | `app.py`, `pipeline.py`, `modes.py` |
 | adversal-cli | 0.1.2 | Local MCP server for video processing and OAuth | `adversal_client.py`, `uv.lock` |
 | MCP | 1.29.0 | stdio client transport to `adversal-cli` | `adversal_client.py` |
-| OpenAI | 3.3.1 | OpenAI/Agnes chat clients and OpenAI embeddings | `llm.py` |
-| google-genai | 2.19.0 | Gemini chat client | `llm.py` |
-| Qdrant Client | 1.19.0 | Persistent local vector storage and cosine retrieval | `vector_store.py` |
+| OpenAI | 3.3.1 | OpenAI/Agnes text and image requests plus OpenAI embeddings | `llm.py` |
+| google-genai | 2.19.0 | Gemini text and image requests | `llm.py` |
+| Qdrant Client | 1.19.0 | Persistent text/frame-description vectors and cosine retrieval | `vector_store.py` |
 | python-dotenv | 1.2.3 | Optional local `.env` loading | `llm.py`, `.env.example` |
 
 The hosted image uses `python:3.13-slim-trixie`, uv 0.12.5, and system FFmpeg. It runs

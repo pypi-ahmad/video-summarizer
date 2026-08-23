@@ -123,6 +123,7 @@ runs/
 └── <timestamp>_<uuid>_<slug>/
     ├── <uploaded-video>       # upload submissions only
     ├── notes.md
+    ├── visual-evidence.json   # resumable frame captions, when built
     ├── <referenced frames>
     └── requested_frames/      # exact timestamp frames, when requested
 ```
@@ -204,30 +205,35 @@ The indexing pipeline:
 
 1. split notes along Adversal chapter separators and headings;
 2. create chunks targeting at most 1,500 characters;
-3. embed with OpenAI `text-embedding-3-small`;
-4. write deterministic UUID points containing request, heading, timestamp, text, notes
-   hash, chunk index, and embedding-model metadata; and
-5. retrieve five cosine-nearest chunks with a mandatory active `request_id` filter.
+3. load resumable frame descriptions from `visual-evidence.json` when available;
+4. embed text chunks and frame descriptions with OpenAI `text-embedding-3-small`;
+5. write deterministic `text` and `frame` points with request, evidence, timestamp,
+   safe image path, notes hash, and embedding-model metadata; and
+6. retrieve five text chunks plus three frames for Ask, or four frames for Create, with
+   a mandatory active `request_id` filter.
 
-Matching request ID, notes hash, embedding model, and chunk count makes indexing
-idempotent. If notes change, only that video's prior points are replaced.
+Matching request ID, notes hash, visual-evidence hash, embedding model, and point count
+makes indexing idempotent. If notes or frame captions change, only that video's points
+are replaced.
 
 The selected chat provider does not change the embedding model. Mixing embedding spaces
 inside the same collection would invalidate similarity comparisons.
 
 ## Generated-document pipeline
 
-`modes.py` owns seven LLM-generated outputs. Each result is cached in Streamlit session
-state using `(request_id, selected_backend)` so normal reruns do not repeat paid calls.
+`modes.py` owns seven LLM-generated outputs. Generation starts only on an explicit user
+click. Each result is cached using `(request_id, selected_backend,
+visual_evidence_hash)` so reruns do not repeat paid calls or reuse stale visual context.
 
 Notes up to 50,000 characters go directly to final generation. Longer notes are reduced
 in batches of at most 30,000 characters until they fit. Image-oriented outputs preserve
 supported Markdown image references through reduction.
 
-The Notes and Key frames views do not invoke a chat model. Ask invokes embeddings when
-the index is absent or stale and invokes the selected chat backend for every submitted
-question. Create invokes the selected backend only on a cache miss. Switching backends
-therefore produces and caches a separate document version for the same request.
+The Notes and Key frames views do not invoke a model. **Build visual index** explicitly
+describes every safe frame using the selected backend and persists each success. Ask
+retrieves five text chunks and three frames, then supplies those pixels to the selected
+backend. Create retrieves up to four frames and supplies their pixels for every workflow.
+Provider image-input failures are surfaced without removing text-only functionality.
 
 ## Model configuration
 
@@ -351,7 +357,8 @@ read-only synchronization check and should pass before committing documentation 
 - Every rendered or archived local image must resolve inside its owning job directory.
 - Every Qdrant query must include the active `request_id` payload filter.
 - Embedding-model changes require a new compatible collection identity.
-- Paid generated documents must remain cached by request ID and selected backend.
+- Paid generated documents must remain cached by request ID, selected backend, and
+  visual-evidence hash.
 - MCP async contexts must be entered and exited by the same worker coroutine.
 - `process_video` must never be retried automatically after an uncertain transport error.
 - Streamlit reruns must not add duplicate logging handlers.
