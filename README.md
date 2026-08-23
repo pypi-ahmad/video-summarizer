@@ -5,7 +5,7 @@
 [![Streamlit](https://img.shields.io/badge/built%20with-Streamlit-FF4B4B)](https://streamlit.io/)
 [![uv](https://img.shields.io/badge/managed%20with-uv-DE5FE9)](https://docs.astral.sh/uv/)
 
-Turn any video into study notes, a meeting digest, a searchable knowledge base, a triage summary, or a blog post - one Streamlit app, five modes, built on [Adversal](https://adversal.ai) for video understanding and a swappable multi-provider LLM layer for everything Adversal doesn't do on its own.
+Process a video once with [Adversal](https://adversal.ai), inspect its Markdown and key frames, search it with Qdrant-backed RAG, and create study or publishing outputs from one Streamlit workspace.
 
 **Repository:** https://github.com/pypi-ahmad/video-summarizer
 
@@ -25,7 +25,7 @@ Turn any video into study notes, a meeting digest, a searchable knowledge base, 
 
 ## Overview
 
-[Adversal](https://adversal.ai) ships as a local [Model Context Protocol](https://modelcontextprotocol.io) server (`adversal-cli`) that turns a video - a local file or a public URL - into chaptered Markdown notes with extracted screenshots. It's genuinely good output: chapters, prose, images tied to timestamps. But it only gives you one shape of output. This project wraps it in a Streamlit UI and adds a thin, mode-specific layer on top so the same underlying video analysis can serve five different jobs:
+[Adversal](https://adversal.ai) ships as a local [Model Context Protocol](https://modelcontextprotocol.io) server (`adversal-cli`) that turns a video - a local file or a public URL - into chaptered Markdown notes with extracted screenshots. This project exposes those source artifacts directly, indexes the Markdown in local Qdrant, and lets the same analysis serve nine different jobs without processing the video again:
 
 | Mode | What you get |
 | --- | --- |
@@ -34,17 +34,22 @@ Turn any video into study notes, a meeting digest, a searchable knowledge base, 
 | **Searchable knowledge base** | Ask questions about the video; answers are grounded in retrieved chapters with citations |
 | **Content triage** | A few bullets plus a watch/skim/skip recommendation, so you don't have to read the full notes to decide |
 | **Video &rarr; blog post** | A title, intro hook, and conclusion added on top of the already blog-shaped chapter notes, downloadable as Markdown |
+| **Quiz and flashcards** | 10 questions, a separate answer key, and 15 flashcards |
+| **SOP/how-to guide** | A practical procedure with prerequisites, cautions, verification, troubleshooting, and relevant screenshots |
+| **Interview insight pack** | Executive summary, themes, Q&A insights, paraphrased statements, and follow-up questions |
+| **FAQ/help-center article** | A support-ready overview, FAQs, troubleshooting, related topics, and relevant screenshots |
 
 > [!NOTE]
 > Adversal is not a REST API - there's no HTTP endpoint or API key to configure. It's a local subprocess launched over stdio via MCP, authenticated once through a browser OAuth flow. See [How it works](#how-it-works).
 
 ## Features
 
-- **Five modes, one pipeline.** Every mode shares the same submit &rarr; poll &rarr; read-results flow; only the `type`/`images` request and the post-processing step differ.
+- **Process once, reuse everywhere.** Choose the Adversal video type and frame density once, then move between Notes, Key frames, Ask, and Create views.
+- **Agent-ready exports.** Download the original Markdown + referenced images or a chapter-level [OKF 0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) bundle.
 - **Multi-provider LLM backend.** Switch between OpenAI (`gpt-5.6-luna`, medium reasoning effort), [Agnes AI](https://www.agnes-ai.com) (`agnes-2.5-flash`), and Google Gemini (`gemini-3.5-flash-lite` or `gemini-3.7-flash`, medium thinking effort) from the sidebar - no code changes.
 - **Non-blocking async polling.** Adversal's video pipeline can take minutes; the app polls it with a `st.fragment` timer instead of freezing the whole page.
 - **Resumable jobs.** Every submitted job is persisted to `runs/jobs.json`, so closing the tab (or restarting the app) doesn't lose track of a still-running job.
-- **No vector database.** The knowledge-base mode chunks notes on Adversal's own chapter headings and does plain NumPy cosine-similarity search - no extra infrastructure for a few hundred chunks.
+- **Persistent Qdrant RAG.** Chapter-aware chunks use OpenAI `text-embedding-3-small` and a disk-backed Qdrant collection under `runs/qdrant`; searches are filtered to the active video.
 
 ## How it works
 
@@ -61,7 +66,10 @@ Turn any video into study notes, a meeting digest, a searchable knowledge base, 
    notes.md + images written to runs/<job>/
       |
       v
-   mode-specific post-processing (none, or one LLM call, or embed+search)
+   one reusable workspace
+      |-- Notes + key-frame gallery + native/OKF exports
+      |-- Qdrant index -> active-video semantic search -> grounded answer
+      `-- selected LLM -> meeting/blog/quiz/SOP/interview/FAQ output
       |
       v
    rendered in Streamlit
@@ -74,17 +82,17 @@ Each call to Adversal (`process_video`, `check_video_status`, `check_remaining_q
 - [uv](https://docs.astral.sh/uv/) - manages the Python interpreter, virtual environment, and dependencies
 - `ffmpeg` / `ffprobe` on `PATH` - required by `adversal-cli` for local video inspection
 - An [Adversal](https://adversal.ai) account (free tier: 100 minutes/month) - sign-in happens via a browser popup on first use, no API key needed
-- A provider key for LLM-backed modes: [OpenAI](https://platform.openai.com/api-keys), [Agnes AI](https://www.agnes-ai.com), and/or [Google AI Studio](https://aistudio.google.com/apikey) for Gemini. Study notes need no LLM key.
+- A provider key for LLM-backed modes: [OpenAI](https://platform.openai.com/api-keys), [Agnes AI](https://www.agnes-ai.com), and/or [Google AI Studio](https://aistudio.google.com/apikey) for Gemini. Notes, key-frame viewing, and artifact downloads need no LLM key; Ask always needs OpenAI embeddings.
 
 ## Getting started
 
 ### Quick start (Windows)
 
 ```bat
-launch.bat
+launch.cmd
 ```
 
-On first run this creates the `.venv` (pinned to Python 3.13.13), copies `.env.example` to `.env` if missing, installs dependencies with `uv sync`, and starts the app. Re-running it is safe - it just syncs and launches.
+On first run this installs `uv` for the current Windows user when needed, installs Python 3.13.13 through uv, creates `.venv` in the project root, copies `.env.example` to `.env` if missing, installs the locked dependencies, and starts the app through the venv's Python. Re-running it is safe - it synchronizes the environment and launches.
 
 ### Manual setup
 
@@ -111,10 +119,10 @@ Copy [`.env.example`](./.env.example) to `.env` and fill in whichever providers 
 
 ## Usage
 
-1. Pick a **mode** and an **LLM backend** in the sidebar.
-2. Provide a video: upload a file, or paste a public URL (downloaded by `adversal-cli` through its bundled `yt-dlp` dependency).
-3. Click **Process video**. A status panel polls Adversal until the job completes.
-4. Read the result. Knowledge-base mode adds a chat box for follow-up questions; blog-post mode adds a Markdown download button.
+1. Upload a video or paste a public URL, then choose its Adversal video type and key-frame density.
+2. Click **Process video**. A status panel polls Adversal until the one reusable analysis completes.
+3. Use **Notes** for Markdown and agent bundles, **Key frames** for the visual gallery, **Ask** for Qdrant-backed RAG, or **Create** for an LLM-generated output.
+4. Use **Process another video** when you want a new source; previous jobs remain resumable.
 
 The sidebar also has:
 
@@ -129,29 +137,38 @@ video-summarizer/
 ├── app.py               # Streamlit entry point: sidebar, mode dispatch
 ├── adversal_client.py   # MCP stdio wrapper around adversal-cli
 ├── pipeline.py           # Job persistence, async status polling, markdown+image rendering
-├── modes.py              # The five mode renderers, plus KB chunking/retrieval
+├── artifacts.py           # Key-frame discovery and native/OKF ZIP exports
+├── modes.py              # Qdrant chunking/chat and seven generated-output renderers
+├── vector_store.py       # Persistent local Qdrant indexing and active-video search
 ├── llm.py                # Multi-provider chat/embeddings wrapper
-├── launch.bat             # One-file first-run setup + launch
+├── launch.cmd             # One-file Windows bootstrap + launch
+├── launch.bat             # Legacy compatibility launcher; launch.cmd is canonical
 ├── .env.example           # Required environment variables, documented
 ├── pyproject.toml         # uv-managed dependencies
 ├── tests/                 # Security, caching, and concurrent-persistence regressions
 ├── docs/
 │   ├── ARCHITECTURE.md    # Technical reference: modules, data flow, design decisions
 │   └── USAGE.md            # Step-by-step how-to guide for every mode
-└── runs/                  # Per-job output (gitignored): notes.md, images, jobs.json
+└── runs/                  # Gitignored jobs plus persistent qdrant/ vector storage
 ```
 
 ## Known limitations
 
 - Adversal's OAuth sign-in opens a browser **on the machine running the Streamlit server**. Fine for local single-user use (the target for this project); not suited to a shared/remote deployment as-is.
-- One selected job per mode in each session. A completed mode has no separate **New job** action; its files and history remain until local runs are cleared.
+- One video workspace is active per browser session; use the resume picker to switch to another persisted job.
 - Local run data (`runs/`) is never auto-deleted; use the sidebar's "Clear all runs" when needed.
 - Uploaded videos, generated notes, images, and indexes are stored unencrypted under `runs/`; avoid shared or remote deployment for sensitive content.
+- Qdrant runs in local mode for this single-process desktop app. Move to Qdrant Server or Cloud before using multiple Streamlit server processes.
 
 ## Documentation
 
-- [How to use the app](./docs/USAGE.md)
-- [Technical architecture](./docs/ARCHITECTURE.md)
+- [Tutorial: process your first video](./docs/TUTORIAL.md)
+- [How-to guides](./docs/HOW_TO.md)
+- [Reference](./docs/REFERENCE.md)
+- [Explanation and design rationale](./docs/EXPLANATION.md)
+- [Documentation chooser](./docs/USAGE.md)
+- [Architecture chooser and diagrams](./docs/ARCHITECTURE.md)
+- [Codebase onboarding](./docs/codebase/ARCHITECTURE.md)
 
 ## Resources
 

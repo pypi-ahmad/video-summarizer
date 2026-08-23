@@ -23,14 +23,14 @@
 
 - Imports follow standard-library, third-party, then project grouping as enforced by Ruff.
 - Root modules use absolute imports such as `import pipeline`; no relative imports or barrel modules exist.
-- `from __future__ import annotations` appears where deferred annotations are useful; `TYPE_CHECKING` guards the type-only Adversal import in `modes.py`.
+- `from __future__ import annotations` appears where deferred annotations are useful; `TYPE_CHECKING` guards type-only imports.
 - Public exports are implicit; no `__all__` policy exists.
 
 ### 4) Error and Logging Conventions
 
 - Integration layer: `AdversalAuthRequiredError` separates authentication from general `AdversalError`; invalid local argument combinations raise `ValueError`.
 - UI layer: expected Adversal errors are caught and displayed with `st.error`; authentication sets session state and reruns.
-- LLM SDK errors, malformed persisted JSON, missing result files and NumPy cache failures currently propagate to Streamlit.
+- LLM SDK errors, malformed persisted JSON, missing result files and Qdrant failures currently propagate to Streamlit.
 - Logging: no logging library, structured fields, metrics or tracing are configured.
 - Sensitive data: API keys are read from environment or gitignored `.env`; code does not log key values. `[TODO]` No explicit error-redaction or telemetry policy exists.
 

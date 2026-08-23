@@ -10,6 +10,7 @@
 | OpenAI | HTTPS API through SDK | Chat and all knowledge-base embeddings | `OPENAI_API_KEY`; optional `OPENAI_BASE_URL` | Medium | `llm.py`, `.env.example` |
 | Agnes AI | OpenAI-compatible HTTPS API | Optional chat backend | `AGNES_API_KEY` | Medium | `llm.py` |
 | Google Gemini | HTTPS API through `google-genai` | Optional chat backend | `GOOGLE_API_KEY` | Medium | `llm.py` |
+| Qdrant Client | Embedded persistent vector database | Store and retrieve active-video chunks | Local filesystem; no credentials | Medium | `vector_store.py` |
 | Public video sources | URL input consumed by Adversal/its `yt-dlp` dependency | Remote video ingestion | Source-dependent | High | `app.py`, `README.md`, `uv.lock` |
 
 ### 2) Data Stores
@@ -17,11 +18,11 @@
 | Store | Role | Access layer | Key risk | Evidence |
 |-------|------|--------------|----------|----------|
 | `runs/jobs.json` | Persistent request registry | `pipeline._load_all_jobs()`, `_save_job()` | Lock is process-local; malformed files still fail loading | `pipeline.py` |
-| `runs/<job>/` | Uploaded video, `notes.md`, images and generated cache | `app.py`, `pipeline.Job` | Unbounded retention; data is stored unencrypted | `README.md`, `app.py`, `pipeline.py` |
-| `kb_index.npz` | Local embedding cache per job | `modes.build_or_load_kb_index()` | Loaded without pickle; malformed caches still fail loading | `modes.py` |
-| Streamlit session state | Per-browser job pointers, drafts, index and chat history | `app.py`, `modes.py` | Lost on session expiry; separate from disk registry | source modules |
+| `runs/<job>/` | Uploaded video, `notes.md`, and extracted images | `app.py`, `pipeline.Job`, `artifacts.py` | Unbounded retention; data is stored unencrypted | source modules |
+| `runs/qdrant/` | Shared local Qdrant collection with request-filtered video chunks | `vector_store.index_video()` | Single-process local-mode lock; deleted by Clear all runs | `vector_store.py` |
+| Streamlit session state | Active job, generated documents, index-ready markers and chat history | `app.py`, `modes.py` | Lost on session expiry; separate from disk registry and Qdrant | source modules |
 
-No database, queue, event bus, service mesh or external cache is configured.
+No external database, queue, event bus, service mesh or cache is configured.
 
 ### 3) Secrets and Credentials Handling
 
@@ -36,7 +37,7 @@ No database, queue, event bus, service mesh or external cache is configured.
 - No explicit retry, exponential backoff, timeout or circuit breaker is configured for Adversal or LLM calls.
 - Adversal status is polled every 8 seconds until `COMPLETED` or `FAILED`; `UNKNOWN` remains in polling state.
 - No fallback provider is selected automatically when an LLM call fails.
-- Meeting and triage outputs are cached by job and backend in session state; blog output is cached by job only.
+- All seven generated documents are cached by request ID and selected backend in session state. Long-note reduction may make multiple sequential LLM calls before final generation.
 
 ### 5) Observability for Integrations
 

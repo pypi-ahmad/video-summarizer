@@ -5,7 +5,7 @@
 ### 1) Architectural Style
 
 - Primary style: small layered Streamlit application with adapters around external services.
-- Classification: UI orchestration (`app.py`) calls shared workflow/persistence (`pipeline.py`), feature renderers (`modes.py`), and integration adapters (`adversal_client.py`, `llm.py`).
+- Classification: UI orchestration (`app.py`) calls workflow/persistence (`pipeline.py`), artifact/export logic (`artifacts.py`), feature renderers (`modes.py`), Qdrant storage (`vector_store.py`), and integration adapters.
 - Primary constraints: local single-user target; Streamlit reruns; multi-minute asynchronous Adversal jobs; file-backed resumability; fresh MCP subprocess per tool call.
 
 ### 2) System Flow
@@ -13,15 +13,16 @@
 ```text
 Streamlit widget -> local upload or public URL -> adversal-cli over MCP stdio
 -> Adversal background job -> 8-second fragment polling -> notes.md + images
--> selected mode renderer -> optional LLM/embedding call -> Streamlit output
+-> one workspace -> notes/frames/exports, Qdrant RAG, or selected LLM output
 ```
 
-1. `app.py:main()` initializes per-session jobs, selects mode/backend, and dispatches current state.
+1. `app.py:main()` initializes one active workspace job, selects the chat backend, and dispatches current state.
 2. `app.py:render_submit_form()` stores an upload under `runs/<job>/` or passes a URL, then calls `pipeline.submit_job()`.
 3. `pipeline.submit_job()` calls `adversal_client.process_video()`, extracts a request ID, creates a `Job`, and persists it in `runs/jobs.json`.
 4. `pipeline.render_job_progress()` polls `check_video_status()` every 8 seconds through `st.fragment`; terminal status is persisted and triggers rerender.
-5. `modes.MODE_RENDERERS` selects direct notes, meeting digest, triage digest, blog draft, or searchable knowledge-base behavior.
-6. `llm.chat()` dispatches to OpenAI, Agnes through the OpenAI-compatible client, or Gemini. Knowledge-base mode uses OpenAI embeddings and NumPy cosine similarity.
+5. Completed jobs expose Notes, Key frames, Ask, and Create; `modes.CREATE_RENDERERS` selects one of seven generated outputs.
+6. Ask embeds chapter-aware chunks with OpenAI and stores/searches them in local Qdrant with a request-ID filter.
+7. `llm.chat()` dispatches grounded prompts to OpenAI, Agnes through the OpenAI-compatible client, or Gemini.
 
 Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED` becomes `AdversalAuthRequiredError`; `app.py` sets session state, shows an authentication banner, invokes browser OAuth, then reruns.
 
@@ -29,9 +30,11 @@ Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED`
 
 | Layer or module | Owns | Must not own | Evidence |
 |-----------------|------|--------------|----------|
-| Presentation/orchestration (`app.py`) | Widgets, global session state, mode dispatch, destructive-run confirmation | MCP protocol and provider SDK construction | `app.py` |
+| Presentation/orchestration (`app.py`) | Widgets, active workspace routing, destructive-run confirmation | MCP protocol and provider SDK construction | `app.py` |
 | Workflow/persistence (`pipeline.py`) | `Job`, status polling, local JSON/file paths, common rendering | Mode-specific prompts and provider credentials | `pipeline.py` |
-| Feature layer (`modes.py`) | Mode configuration, prompts, retrieval, mode UI | Adversal transport | `modes.py` |
+| Artifact layer (`artifacts.py`) | Safe frame resolution and native/OKF exports | UI state or remote service calls | `artifacts.py` |
+| Feature layer (`modes.py`) | Prompts, chunking, RAG chat and generated-output UI | Adversal transport | `modes.py` |
+| Vector store (`vector_store.py`) | Qdrant collection, indexing, payload filtering and retrieval | Chat generation or Streamlit UI | `vector_store.py` |
 | Adversal adapter (`adversal_client.py`) | MCP subprocess/session, tool calls, tool-error translation | Streamlit rendering | `adversal_client.py` |
 | LLM adapter (`llm.py`) | Environment-backed clients, model dispatch, embeddings | Job/session persistence | `llm.py` |
 
@@ -40,17 +43,18 @@ Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED`
 | Pattern | Where found | Why it exists |
 |---------|-------------|---------------|
 | Adapter | `adversal_client.py`, `llm.py` | Isolates MCP and provider SDK details from UI/features |
-| Strategy table | `llm._DISPATCH`, `modes.MODE_RENDERERS` | Selects provider or output behavior without branching chains |
+| Strategy table | `llm._DISPATCH`, `modes.CREATE_RENDERERS` | Selects provider or output behavior without branching chains |
 | Data transfer object | `pipeline.Job`, `modes.Chunk`, `llm.LLMOption` | Carries persisted job, retrieval and provider data |
-| Streamlit session cache | Digests, blog drafts, KB indexes and chats in `modes.py` | Preserves generated state across reruns for one browser session |
+| Streamlit session cache | Generated documents, index-ready markers and chats in `modes.py` | Preserves generated state across reruns for one browser session |
+| Persistent vector store | `runs/qdrant/` through `vector_store.py` | Reuses embeddings across sessions and filters retrieval by active request |
 | File-backed registry | `runs/jobs.json` | Resumes Adversal jobs after app restart |
 
 ### 5) Known Architectural Risks
 
 - `jobs.json` locking is process-local; multiple server processes would not share it.
 - Generated mode caches are session-local and disappear when the browser session ends.
-- Meeting and triage caches include the selected backend in their key; blog drafts use only the request ID, so switching backend does not regenerate an existing draft.
-- Focused local regressions exist, but no CI layer runs them automatically.
+- Persistent Qdrant local mode supports this single process; multi-process deployment needs Qdrant Server or Cloud.
+- The Windows `quality` workflow runs dependency sync, Ruff, ty, and pytest; non-Windows behavior is not covered by CI.
 
 ### 6) Evidence
 
@@ -58,6 +62,9 @@ Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED`
 - `app.py`
 - `pipeline.py`
 - `modes.py`
+- `artifacts.py`
+- `vector_store.py`
 - `adversal_client.py`
 - `llm.py`
 - `tests/test_regressions.py`
+- `.github/workflows/ci.yml`
