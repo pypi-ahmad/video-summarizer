@@ -59,6 +59,10 @@ def _url_source_name(url: str) -> str:
     return Path(parsed.path).name or parsed.netloc or "Video URL"
 
 
+def _parse_timestamps(value: str) -> list[str]:
+    return [part.strip() for part in re.split(r"[,\n]", value) if part.strip()]
+
+
 def render_auth_banner_if_needed() -> bool:
     if not st.session_state.get("auth_required"):
         return False
@@ -151,6 +155,15 @@ def render_submit_form() -> None:
 
     video_type_label = st.selectbox("Video type", list(VIDEO_TYPES), index=0)
     image_density_label = st.selectbox("Key visual frames", list(IMAGE_DENSITIES), index=1)
+    with st.expander("Advanced processing controls"):
+        st.caption("Use seconds, MM:SS, or HH:MM:SS. Leave blank to process the full video.")
+        start_time_input = st.text_input("Start time", placeholder="00:10")
+        end_time_input = st.text_input("End time", placeholder="01:20")
+        timestamps_input = st.text_area(
+            "Exact frame timestamps",
+            placeholder="00:20, 00:40\n01:00",
+            help="Separate timestamps with commas or new lines.",
+        )
     st.caption("The video is processed once. Notes, frames, search, and outputs reuse it.")
 
     if not st.button("Process video", type="primary"):
@@ -163,6 +176,9 @@ def render_submit_form() -> None:
         return
 
     source_name = uploaded_file.name if uploaded_file else _url_source_name(video_url or "")
+    start_time = start_time_input.strip() or None
+    end_time = end_time_input.strip() or None
+    timestamps = _parse_timestamps(timestamps_input)
     logger.info(
         "job.submit_requested source_kind=%s video_type=%s image_density=%s",
         "upload" if uploaded_file else "url",
@@ -187,6 +203,9 @@ def render_submit_form() -> None:
             video_url=video_url,
             type=VIDEO_TYPES[video_type_label],
             images=IMAGE_DENSITIES[image_density_label],
+            start_time=start_time,
+            end_time=end_time,
+            timestamps=timestamps,
             source_name=source_name,
             source_url=video_url,
         )
@@ -205,10 +224,15 @@ def render_submit_form() -> None:
 
 def render_failure(job: Job) -> None:
     st.error(f"Processing failed: {job.error or 'unknown error'}")
-    if st.button("Start over"):
-        logger.info("job.start_over request_id=%s", job.request_id)
-        st.session_state.active_job = None
-        st.rerun()
+    with st.container(horizontal=True):
+        if st.button("Retry status check", icon=":material/refresh:"):
+            logger.info("job.status_retry request_id=%s", job.request_id)
+            pipeline.retry_job(job)
+            st.rerun()
+        if st.button("Start over"):
+            logger.info("job.start_over request_id=%s", job.request_id)
+            st.session_state.active_job = None
+            st.rerun()
 
 
 def render_notes(job: Job) -> None:
@@ -219,9 +243,10 @@ def render_notes(job: Job) -> None:
         st.error("Adversal marked this job complete, but its Markdown file is missing.")
         return
     images = artifacts.find_local_images(notes, job.output_path)
+    requested_frames = pipeline.find_requested_frames(job.output_path)
     with st.container(horizontal=True):
         st.metric("Sections", len(artifacts.split_sections(notes)))
-        st.metric("Key frames", len(images))
+        st.metric("Key frames", len(images) + len(requested_frames))
         st.metric("Analysis profile", job.video_type)
     with st.container(horizontal=True):
         st.download_button(
@@ -251,10 +276,17 @@ def render_notes(job: Job) -> None:
 def render_frames(job: Job) -> None:
     notes = pipeline.load_completed_notes(job)
     images = artifacts.find_local_images(notes, job.output_path)
-    if not images:
-        st.info("This Adversal analysis did not return referenced key frames.")
+    frames = [(image.path, image.alt or image.relative_path.name) for image in images]
+    known_paths = {path.resolve() for path, _ in frames}
+    frames.extend(
+        (path, f"Requested frame · {path.stem}")
+        for path in pipeline.find_requested_frames(job.output_path)
+        if path.resolve() not in known_paths
+    )
+    if not frames:
+        st.info("This Adversal analysis did not return any key or requested frames.")
         return
-    page_count = math.ceil(len(images) / FRAME_PAGE_SIZE)
+    page_count = math.ceil(len(frames) / FRAME_PAGE_SIZE)
     page = 1
     if page_count > 1:
         page = st.number_input(
@@ -265,12 +297,12 @@ def render_frames(job: Job) -> None:
             key=f"frame-page-{job.request_id}",
         )
     start = (page - 1) * FRAME_PAGE_SIZE
-    visible = images[start : start + FRAME_PAGE_SIZE]
+    visible = frames[start : start + FRAME_PAGE_SIZE]
     columns = st.columns(3)
-    for index, image in enumerate(visible):
+    for index, (path, caption) in enumerate(visible):
         with columns[index % 3]:
-            st.image(str(image.path), caption=image.alt or image.relative_path.name)
-    st.caption(f"Showing {start + 1}-{start + len(visible)} of {len(images)} key frames")
+            st.image(str(path), caption=caption)
+    st.caption(f"Showing {start + 1}-{start + len(visible)} of {len(frames)} frames")
 
 
 def render_create(job: Job) -> None:
@@ -286,8 +318,12 @@ def render_workspace(job: Job) -> None:
             logger.info("workspace.closed request_id=%s", job.request_id)
             st.session_state.active_job = None
             st.rerun()
+    time_window = "full video"
+    if job.start_time or job.end_time:
+        time_window = f"{job.start_time or 'start'} to {job.end_time or 'end'}"
     st.caption(
-        f"Adversal request `{job.request_id}` · {job.video_type} · {job.image_density} frames"
+        f"Adversal request `{job.request_id}` · {job.video_type} · "
+        f"{job.image_density} frames · {time_window}"
     )
     view = st.segmented_control(
         "Workspace",

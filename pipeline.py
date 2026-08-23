@@ -23,7 +23,7 @@ JOBS_LOCK = threading.Lock()
 logger = observability.get_logger("pipeline")
 
 IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
-REQUEST_ID_RE = re.compile(r'request[_ ]?id["\':\s]+([\w-]+)', re.IGNORECASE)
+IMAGE_SUFFIXES = {".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 
 @dataclass
@@ -39,6 +39,9 @@ class Job:
     source_url: str | None = None
     video_type: adversal_client.VideoType = "generic"
     image_density: adversal_client.ImageDensity = "selective"
+    start_time: str | None = None
+    end_time: str | None = None
+    timestamps: list[str] = field(default_factory=list)
     completed_at: float | None = None
 
     @property
@@ -77,31 +80,6 @@ def new_job_dir(slug: str) -> Path:
     return job_dir
 
 
-def _extract_request_id(result: dict | str) -> str:
-    if isinstance(result, dict):
-        for key in ("request_id", "requestId", "id"):
-            if key in result:
-                return str(result[key])
-        text = json.dumps(result)
-    else:
-        text = str(result)
-    match = REQUEST_ID_RE.search(text)
-    if match:
-        return match.group(1)
-    msg = f"could not find request_id in adversal response: {text[:200]}"
-    raise adversal_client.AdversalError(msg)
-
-
-def _extract_status(result: dict | str) -> tuple[str, str | None]:
-    if isinstance(result, dict) and "status" in result:
-        return result["status"], result.get("error")
-    text = json.dumps(result) if isinstance(result, dict) else str(result)
-    for candidate in ("COMPLETED", "FAILED", "RUNNING", "UNKNOWN"):
-        if candidate in text.upper():
-            return candidate, text if candidate == "FAILED" else None
-    return "UNKNOWN", None
-
-
 def submit_job(
     *,
     mode: str,
@@ -110,18 +88,23 @@ def submit_job(
     video_url: str | None,
     type: adversal_client.VideoType,  # noqa: A002 - matches adversal-cli's own parameter name
     images: adversal_client.ImageDensity,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    timestamps: list[str] | None = None,
     source_name: str = "Video",
     source_url: str | None = None,
 ) -> Job:
     logger.info("job.submission_started video_type=%s image_density=%s", type, images)
-    result = adversal_client.process_video(
+    request_id = adversal_client.process_video(
         video_path=video_path,
         video_url=video_url,
         output_path=str(job_dir),
         type=type,
         images=images,
+        start_time=start_time,
+        end_time=end_time,
+        timestamps=timestamps,
     )
-    request_id = _extract_request_id(result)
     job = Job(
         mode=mode,
         request_id=request_id,
@@ -130,6 +113,9 @@ def submit_job(
         source_url=source_url,
         video_type=type,
         image_density=images,
+        start_time=start_time,
+        end_time=end_time,
+        timestamps=timestamps or [],
     )
     _save_job(job)
     logger.info("job.submission_completed request_id=%s", request_id)
@@ -158,15 +144,24 @@ def render_job_progress() -> None:
             _save_job(job)
             st.rerun()
             return
-        status, error = _extract_status(result)
+        status, error = result.status, result.error
         logger.info("job.poll_completed request_id=%s status=%s", job.request_id, status)
         st.write(f"Status: {status} - last checked {time.strftime('%H:%M:%S')}")
-        if status in ("COMPLETED", "FAILED"):
-            job.status, job.error = status, error
+        if status in ("COMPLETED", "FAILED", "UNKNOWN"):
+            job.status = "FAILED" if status == "UNKNOWN" else status
+            job.error = error
             if status == "COMPLETED":
                 job.completed_at = time.time()
             _save_job(job)
             st.rerun()
+
+
+def retry_job(job: Job) -> None:
+    """Resume status checks for an existing Adversal request without resubmitting it."""
+    job.status = "RUNNING"
+    job.error = None
+    job.completed_at = None
+    _save_job(job)
 
 
 def load_completed_notes(job: Job) -> str:
@@ -179,6 +174,21 @@ def _resolve_local_image(base_dir: Path, src: str) -> Path | None:
     if not image_path.is_relative_to(resolved_base) or not image_path.is_file():
         return None
     return image_path
+
+
+def find_requested_frames(base_dir: Path) -> list[Path]:
+    """Return safe image files created by Adversal for explicit timestamps."""
+    resolved_base = base_dir.resolve()
+    requested_dir = (resolved_base / "requested_frames").resolve()
+    if not requested_dir.is_relative_to(resolved_base) or not requested_dir.is_dir():
+        return []
+    return sorted(
+        path.resolve()
+        for path in requested_dir.iterdir()
+        if path.is_file()
+        and path.suffix.lower() in IMAGE_SUFFIXES
+        and path.resolve().is_relative_to(resolved_base)
+    )
 
 
 def render_markdown_with_images(markdown_text: str, base_dir: Path) -> None:

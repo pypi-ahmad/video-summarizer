@@ -1,13 +1,16 @@
 # ruff: noqa: ANN001, ANN003, ANN202, INP001, PLR2004, S101, SLF001
 
 import io
+import json
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from qdrant_client import QdrantClient
 
+import adversal_client
 import app
 import artifacts
 import llm
@@ -115,7 +118,7 @@ def test_submit_job_persists_analysis_settings(tmp_path: Path, monkeypatch) -> N
 
     def fake_process_video(**kwargs):
         calls.append(kwargs)
-        return {"request_id": "request-1"}
+        return "request-1"
 
     monkeypatch.setattr(pipeline.adversal_client, "process_video", fake_process_video)
     monkeypatch.setattr(pipeline, "RUNS_DIR", tmp_path)
@@ -128,11 +131,17 @@ def test_submit_job_persists_analysis_settings(tmp_path: Path, monkeypatch) -> N
         video_url=None,
         type="lesson",
         images="generous",
+        start_time="00:10",
+        end_time="01:20",
+        timestamps=["00:20", "00:40"],
         source_name="lecture.mp4",
     )
 
     assert job.video_type == "lesson"
     assert job.image_density == "generous"
+    assert job.start_time == "00:10"
+    assert job.end_time == "01:20"
+    assert job.timestamps == ["00:20", "00:40"]
     assert job.source_name == "lecture.mp4"
     assert calls == [
         {
@@ -141,8 +150,132 @@ def test_submit_job_persists_analysis_settings(tmp_path: Path, monkeypatch) -> N
             "output_path": str(tmp_path),
             "type": "lesson",
             "images": "generous",
+            "start_time": "00:10",
+            "end_time": "01:20",
+            "timestamps": ["00:20", "00:40"],
         }
     ]
+
+
+def test_adversal_process_error_preserves_remote_message(monkeypatch) -> None:
+    monkeypatch.setattr(
+        adversal_client,
+        "_call_tool",
+        lambda *_args, **_kwargs: "Video URL download timed out after 10 minutes.",
+    )
+
+    with pytest.raises(adversal_client.AdversalError) as exc_info:
+        adversal_client.process_video(video_url="https://example.com/video", output_path="out")
+    assert str(exc_info.value) == "Video URL download timed out after 10 minutes."
+
+
+def test_adversal_authentication_must_report_success(monkeypatch) -> None:
+    monkeypatch.setattr(
+        adversal_client,
+        "_call_tool",
+        lambda *_args, **_kwargs: "AUTHENTICATION FAILED.\n\nBrowser flow expired.",
+    )
+
+    with pytest.raises(adversal_client.AdversalError) as exc_info:
+        adversal_client.authenticate()
+    assert "AUTHENTICATION FAILED" in str(exc_info.value)
+
+
+def test_adversal_status_parsing_is_explicit(monkeypatch) -> None:
+    monkeypatch.setattr(
+        adversal_client,
+        "_call_tool",
+        lambda *_args, **_kwargs: "UNKNOWN — no job found for request_id request-1.",
+    )
+
+    result = adversal_client.check_video_status("request-1")
+
+    assert result.status == "UNKNOWN"
+    assert result.error == "UNKNOWN — no job found for request_id request-1."
+
+    monkeypatch.setattr(
+        adversal_client,
+        "_call_tool",
+        lambda *_args, **_kwargs: "HTTP connection error while recovering: offline",
+    )
+    with pytest.raises(adversal_client.AdversalError) as exc_info:
+        adversal_client.check_video_status("request-1")
+    assert str(exc_info.value) == "HTTP connection error while recovering: offline"
+
+
+def test_adversal_connection_is_reused_and_reset_after_failure(monkeypatch) -> None:
+    created = []
+
+    class FakeConnection:
+        def __init__(self) -> None:
+            self.closed = False
+            self.fail = False
+            created.append(self)
+
+        def call_tool(self, tool_name, _arguments):
+            if self.fail:
+                error_message = "connection lost"
+                raise OSError(error_message)
+            return SimpleNamespace(
+                content=[],
+                structuredContent={"result": f"{tool_name}: ok"},
+                isError=False,
+            )
+
+        def close(self) -> None:
+            self.closed = True
+
+    monkeypatch.setattr(adversal_client, "_MCPConnection", FakeConnection)
+    monkeypatch.setattr(adversal_client, "_connection", None)
+
+    assert adversal_client._call_tool("first", {}) == "first: ok"
+    assert adversal_client._call_tool("second", {}) == "second: ok"
+    assert len(created) == 1
+
+    created[0].fail = True
+    with pytest.raises(adversal_client.AdversalError):
+        adversal_client._call_tool("broken", {})
+    assert created[0].closed
+
+    assert adversal_client._call_tool("reconnected", {}) == "reconnected: ok"
+    assert len(created) == 2
+
+
+def test_requested_frames_are_contained_and_discovered(tmp_path: Path) -> None:
+    requested_dir = tmp_path / "requested_frames"
+    requested_dir.mkdir()
+    frame = requested_dir / "00-20.jpg"
+    frame.write_bytes(b"frame")
+    (requested_dir / "ignore.txt").write_text("not an image", encoding="utf-8")
+
+    assert pipeline.find_requested_frames(tmp_path) == [frame.resolve()]
+
+
+def test_timestamp_input_accepts_commas_and_lines() -> None:
+    assert app._parse_timestamps("00:10, 00:20\n35") == ["00:10", "00:20", "35"]
+
+
+def test_legacy_job_records_get_focused_processing_defaults(tmp_path: Path, monkeypatch) -> None:
+    jobs_file = tmp_path / "jobs.json"
+    jobs_file.write_text(
+        json.dumps(
+            {
+                "request-1": {
+                    "mode": "Source analysis",
+                    "request_id": "request-1",
+                    "output_dir": str(tmp_path),
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(pipeline, "JOBS_FILE", jobs_file)
+
+    job = pipeline.list_saved_jobs()[0]
+
+    assert job.start_time is None
+    assert job.end_time is None
+    assert job.timestamps == []
 
 
 def test_qdrant_index_is_idempotent_and_filtered_by_video(monkeypatch) -> None:
@@ -338,6 +471,7 @@ def test_env_example_contains_safe_defaults() -> None:
         "AGNES_API_KEY": "",
         "GOOGLE_API_KEY": "",
         "VIDEO_SUMMARIZER_LOG_LEVEL": "INFO",
+        "VIDEO_SUMMARIZER_DATA_DIR": "/data",
     }
 
 
