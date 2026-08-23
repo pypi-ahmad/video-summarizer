@@ -420,7 +420,42 @@ and common token formats are redacted.
 
 ## Architecture
 
-[![Video Summarizer system architecture](./docs/diagrams/system-architecture.svg)](./docs/diagrams/video-summarizer-architecture.html)
+```mermaid
+flowchart TB
+    user["Video + workflow choices"] --> app["Streamlit workspace<br/>submit · monitor · explore · export"]
+
+    subgraph understand["UNDERSTAND THE VIDEO ONCE"]
+        direction LR
+        mcp["Persistent Adversal MCP session<br/>serialized tool calls"] --> cloud["Adversal video understanding<br/>remote processing"]
+        cloud --> artifacts[("Reusable source artifacts<br/>structured Markdown · timestamps · key frames")]
+    end
+
+    subgraph reuse["REUSE THE EVIDENCE"]
+        direction TB
+        manifest[("Visual evidence manifest<br/>resumable frame descriptions")]
+        qdrant[("Qdrant retrieval index<br/>text + frame-description vectors")]
+        models["OpenAI · Agnes · Gemini<br/>captioning + multimodal reasoning"]
+        outputs["Grounded results<br/>Ask · 9 Create workflows · Markdown · ZIP · OKF"]
+    end
+
+    app -->|submit or resume| mcp
+    artifacts --> manifest
+    artifacts -->|Markdown chunks| qdrant
+    models -->|caption safe frames| manifest
+    manifest -->|frame descriptions| qdrant
+    app <-->|query + relevant evidence| qdrant
+    app -->|prompt + retrieved frame pixels| models
+    models --> outputs
+
+    classDef focal fill:#fff0e9,stroke:#eb6c36,color:#2d3142,stroke-width:2px
+    classDef store fill:#eef0f4,stroke:#4f5d75,color:#2d3142
+    classDef external fill:#f8f8f8,stroke:#7a8399,color:#2d3142,stroke-dasharray:4 3
+    class app,outputs focal
+    class artifacts,manifest,qdrant store
+    class cloud,models external
+```
+
+[Open the interactive architecture diagram](./docs/diagrams/video-summarizer-architecture.html) or view the [Mermaid source](./docs/diagrams/system-architecture.mmd).
 
 The Streamlit process lazily opens one `adversal-cli` MCP subprocess. A daemon worker
 thread owns its asynchronous MCP context, while a thread-safe queue serializes

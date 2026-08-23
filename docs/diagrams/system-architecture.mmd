@@ -1,20 +1,32 @@
-flowchart LR
-    user["Trusted user"] --> app["Streamlit app<br/>configure · retry · resume"]
-    app --> client["Persistent MCP client<br/>worker thread · serialized queue"]
-    client --> cli["adversal-cli<br/>one stdio session"]
-    cli --> adversal["Adversal backend<br/>remote video analysis"]
-    adversal --> files[("Job artifacts<br/>Markdown · key + exact frames")]
-    files --> workspace["Reusable workspace<br/>Notes · Frames · Ask · Create"]
-    workspace --> evidence[("Visual evidence manifest<br/>resumable frame captions")]
-    workspace --> qdrant[("Qdrant<br/>text + frame-description vectors")]
-    workspace --> providers["OpenAI · Agnes · Gemini<br/>caption + multimodal reasoning"]
-    evidence --> qdrant
-    qdrant --> workspace
-    providers --> evidence
+flowchart TB
+    user["Video + workflow choices"] --> app["Streamlit workspace<br/>submit · monitor · explore · export"]
+
+    subgraph understand["UNDERSTAND THE VIDEO ONCE"]
+        direction LR
+        mcp["Persistent Adversal MCP session<br/>serialized tool calls"] --> cloud["Adversal video understanding<br/>remote processing"]
+        cloud --> artifacts[("Reusable source artifacts<br/>structured Markdown · timestamps · key frames")]
+    end
+
+    subgraph reuse["REUSE THE EVIDENCE"]
+        direction TB
+        manifest[("Visual evidence manifest<br/>resumable frame descriptions")]
+        qdrant[("Qdrant retrieval index<br/>text + frame-description vectors")]
+        models["OpenAI · Agnes · Gemini<br/>captioning + multimodal reasoning"]
+        outputs["Grounded results<br/>Ask · 9 Create workflows · Markdown · ZIP · OKF"]
+    end
+
+    app -->|submit or resume| mcp
+    artifacts --> manifest
+    artifacts -->|Markdown chunks| qdrant
+    models -->|caption safe frames| manifest
+    manifest -->|frame descriptions| qdrant
+    app <-->|query + relevant evidence| qdrant
+    app -->|prompt + retrieved frame pixels| models
+    models --> outputs
 
     classDef focal fill:#fff0e9,stroke:#eb6c36,color:#2d3142,stroke-width:2px
     classDef store fill:#eef0f4,stroke:#4f5d75,color:#2d3142
     classDef external fill:#f8f8f8,stroke:#7a8399,color:#2d3142,stroke-dasharray:4 3
-    class app,workspace focal
-    class files,evidence,qdrant store
-    class adversal,providers external
+    class app,outputs focal
+    class artifacts,manifest,qdrant store
+    class cloud,models external
