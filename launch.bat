@@ -16,7 +16,7 @@ if not exist ".venv" (
 
 if not exist ".env" if exist ".env.example" (
     copy ".env.example" ".env" >nul
-    echo Created .env from .env.example - fill in your API keys before using LLM features.
+    echo Created .env from .env.example - fill only keys missing from your user environment.
 )
 
 echo Installing dependencies...
