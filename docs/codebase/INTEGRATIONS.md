@@ -21,10 +21,11 @@
 | `runs/jobs.json` | Persistent request registry | `pipeline._load_all_jobs()`, `_save_job()` | Lock is process-local; malformed files still fail loading | `pipeline.py` |
 | `runs/<job>/` | Uploaded video, `notes.md`, and extracted images | `app.py`, `pipeline.Job`, `artifacts.py` | Unbounded retention; data is stored unencrypted | source modules |
 | `runs/qdrant/` | Shared local Qdrant collection with request-filtered video chunks | `vector_store.index_video()` | Single-process local-mode lock; deleted by Clear all runs | `vector_store.py` |
-| Streamlit session state | Active job, generated documents, index-ready markers and chat history | `app.py`, `modes.py` | Lost on session expiry; separate from disk registry and Qdrant | source modules |
+| Streamlit session state | Active job, generated documents used by Download All, index-ready markers and chat history | `app.py`, `modes.py` | Lost on session expiry; separate from disk registry and Qdrant | source modules |
 | `/data` bucket mount | Hosted runs, Adversal OAuth state, and rotating logs | `container-entrypoint.sh` | One shared trust boundary; private single-user deployment only | deployment files |
 
-No external database, queue, event bus, service mesh or cache is configured.
+The application does not configure an external database, queue, event bus, service mesh,
+or cache.
 
 ### 3) Secrets and Credentials Handling
 
@@ -40,6 +41,7 @@ No external database, queue, event bus, service mesh or cache is configured.
 - Adversal status is polled every 8 seconds until `COMPLETED` or `FAILED`; `UNKNOWN` remains in polling state.
 - No fallback provider is selected automatically when an LLM call fails.
 - All seven generated documents are cached by request ID and selected backend in session state. Long-note reduction may make multiple sequential LLM calls before final generation.
+- Download All reads the active backend's existing cache entries and packages them with the three core downloads; it never invokes a provider or generates a missing document.
 
 ### 5) Observability for Integrations
 

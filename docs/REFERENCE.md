@@ -1,6 +1,6 @@
 # Reference
 
-This page records the application's supported inputs, configuration, controls, storage,
+This page lists the application's supported inputs, configuration, controls, storage,
 and runtime contracts. For task instructions, use the [how-to guides](./HOW_TO.md).
 
 ## Runtime
@@ -31,10 +31,9 @@ Adversal.
 | Persistent bucket | `pypi-ahmad/video-summarizer-data` |
 | Bucket mount | `/data` |
 
-Hugging Face currently requires a PRO subscription to create this Docker Space. CPU
-Basic has no hourly hardware charge, but compute-Space creation is subscription-gated.
-The private bucket exists; the Space itself is pending that subscription requirement.
-The table describes the checked-in deployment target, not a currently running service.
+Creating a Docker Space requires a paid Hugging Face plan. CPU Basic has no hourly
+hardware charge, but compute-Space creation is subscription-gated. The table describes
+the checked-in deployment target; it does not assert the live deployment state.
 
 The container startup script maps these persistent paths:
 
@@ -57,9 +56,10 @@ from the private runtime-log URL and persisted in `/data/adversal`.
 | `AGNES_API_KEY` | Agnes chat | No default |
 | `GOOGLE_API_KEY` | Gemini chat | No default |
 | `VIDEO_SUMMARIZER_LOG_LEVEL` | Application logging verbosity | `INFO` |
+| `VIDEO_SUMMARIZER_DATA_DIR` | Container root for persistent runs, Adversal state, and logs | `/data` |
 
 `python-dotenv` loads `.env` with `override=False`; existing process environment values
-win. Adversal authentication is managed by `adversal-cli` through browser OAuth and has
+take precedence. Adversal authentication is managed by `adversal-cli` through browser OAuth and has
 no application environment variable.
 
 ## Chat and embedding models
@@ -130,17 +130,26 @@ but does not remove the persisted job or files.
 | Create | One of seven generated Markdown documents |
 
 Only one video is active in a browser session. **Process another video** clears that
-selection; it does not delete the job.
+selection; it does not delete the job. **Download all** remains visible beside the
+workspace title in every view.
 
 ## Output contracts
 
 ### Source downloads
 
-- **Markdown:** the completed job's configured notes filename, normally `notes.md`.
+- **Markdown:** the completed job's source notes.
 - **Native ZIP:** notes plus referenced images whose resolved paths remain inside the
   job directory.
 - **OKF 0.2 ZIP:** `index.md`, `video.md`, numbered chapter files under `chapters/`, and
   referenced images under `assets/`.
+- **Download all ZIP:** the renamed Markdown, native ZIP, OKF ZIP, and generated
+  documents already cached for the active request and selected backend. It does not
+  generate missing documents.
+
+The filename contract is `<safe-original-stem>_<download-type>.<extension>`. Spaces and
+unsafe separators in the source stem become underscores. Examples include
+`My_Lecture_notes.md`, `My_Lecture_native_bundle.zip`,
+`My_Lecture_okf_0_2_bundle.zip`, and `My_Lecture_all_downloads.zip`.
 
 The OKF index declares `okf_version: "0.2"`. Video and chapter concepts contain YAML
 frontmatter, source metadata, draft status, and generation metadata.
@@ -149,15 +158,15 @@ frontmatter, source metadata, draft status, and generation metadata.
 
 | Output | Download filename |
 | --- | --- |
-| Meeting/webinar summarizer | `meeting_summary.md` |
-| Content triage | `content_triage.md` |
-| Video to blog post | `blog_post.md` |
-| Quiz and flashcards | `quiz_flashcards.md` |
-| SOP/how-to guide | `sop_guide.md` |
-| Interview insight pack | `interview_insights.md` |
-| FAQ/help-center article | `faq_article.md` |
+| Meeting/webinar summarizer | `<stem>_meeting_summary.md` |
+| Content triage | `<stem>_content_triage.md` |
+| Video to blog post | `<stem>_blog_post.md` |
+| Quiz and flashcards | `<stem>_quiz_flashcards.md` |
+| SOP/how-to guide | `<stem>_sop_guide.md` |
+| Interview insight pack | `<stem>_interview_insights.md` |
+| FAQ/help-center article | `<stem>_faq_article.md` |
 
-Each document is session-cached by `(request_id, selected_backend)`. Source notes at or
+Each document is cached in the session by `(request_id, selected_backend)`. Source notes at or
 below 50,000 characters go directly to the final prompt. Longer notes are condensed in
 batches of at most 30,000 characters until they fit the final generation step.
 
@@ -190,8 +199,8 @@ runs/
 
 `jobs.json` is updated through a process-local lock and atomic temporary-file
 replacement. Run data is unencrypted and has no automatic retention policy. Generated
-documents and chat history remain in Streamlit session state rather than being written
-to this tree.
+documents and chat history remain in Streamlit session state instead of being written to
+this tree.
 
 ## Logging
 
@@ -236,6 +245,6 @@ check before merge.
   sign-in URL is read from runtime logs.
 - Local Qdrant storage must not be shared by multiple app processes.
 - No automatic retry, provider fallback, retention cleanup, or encryption is implemented.
-- A private Hugging Face Docker deployment workflow is checked in, but the target Space
-  is not yet created. Public or multi-user deployment is unsupported.
+- A private Hugging Face Docker deployment workflow is checked in. Creating the Space
+  requires a paid plan; public or multi-user deployment is unsupported.
 - Provider output and retrieval scores require human verification for important use.

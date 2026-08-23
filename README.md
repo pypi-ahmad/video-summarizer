@@ -1,20 +1,9 @@
----
-title: Video Summarizer
-emoji: 🎬
-colorFrom: indigo
-colorTo: blue
-sdk: docker
-app_port: 7860
-license: mit
-short_description: Turn videos into notes, key frames, searchable knowledge, and reusable content.
----
-
 <div align="center">
 
 # Video Summarizer
 
-Turn one video into structured notes, key visual frames, grounded answers, and reusable
-learning or publishing content.
+Process one video into structured notes, visual frames, answers with sources, and content
+you can reuse for learning or publishing.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/pypi-ahmad/video-summarizer/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/pypi-ahmad/video-summarizer/actions/workflows/ci.yml)
 [![Python 3.13+](https://img.shields.io/badge/Python-3.13%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -27,11 +16,11 @@ learning or publishing content.
 
 </div>
 
-Video Summarizer is a single-user Streamlit workspace built around
-[Adversal](https://adversal.ai). Upload a video or provide a public URL once; Adversal
-turns it into chaptered Markdown and selected screenshots. The app then reuses those
-artifacts for semantic search, study material, operational documents, and publishable
-content without analyzing the raw video again.
+Video Summarizer is a Streamlit workspace for one user, built around
+[Adversal](https://adversal.ai). Upload a video or provide a public URL once. Adversal
+returns chaptered Markdown and selected screenshots. The app reuses those files for
+semantic search, study material, operating documents, and publishable content without
+running another analysis on the video.
 
 > [!IMPORTANT]
 > Adversal is a remote video-understanding service exposed through a local
@@ -40,17 +29,17 @@ content without analyzing the raw video again.
 
 ## Why this project exists
 
-Long videos are awkward inputs for language models. Full transcripts consume large
-context windows, while transcript-only pipelines lose important slides, diagrams, code,
-and scenes. This project separates the expensive multimodal step from later reuse:
+Long videos are difficult inputs for language models. Full transcripts consume large
+context windows, while transcript-only pipelines miss slides, diagrams, code, and other
+useful scenes. This project keeps the expensive video pass separate from later reuse:
 
 1. Adversal extracts structured chapters and representative visual frames.
-2. The app keeps those artifacts as the inspectable source of truth.
+2. The app keeps those artifacts as the source you can inspect.
 3. Qdrant retrieves only relevant chapters for questions.
-4. A selected LLM transforms the notes into a purpose-built document.
+4. A selected LLM turns the notes into a document for the chosen task.
 
-The result is one durable video workspace rather than a separate processing pipeline for
-every output.
+This gives each video one durable workspace instead of a separate pipeline for every
+output.
 
 ## What you can create
 
@@ -87,8 +76,7 @@ source host and Adversal.
 
 ### Notes and visual evidence
 
-The completed Adversal result is exposed directly instead of being hidden behind an LLM
-summary:
+The completed Adversal result appears directly before any LLM summary:
 
 - **Notes** renders the original chaptered Markdown and its local image references.
 - **Metrics** show section count, safe referenced-frame count, and analysis profile.
@@ -149,9 +137,14 @@ The **Notes** view provides three source-artifact formats:
 | **Markdown** | Adversal's completed `notes.md` | Reading, editing, or passing text to another tool |
 | **Native bundle** | Source Markdown plus only its safely resolved referenced images | Moving the original Adversal result as one ZIP |
 | **OKF 0.2 bundle** | `index.md`, `video.md`, chapter concepts, and image assets | Ingestion by agents or knowledge-catalog workflows |
+| **Download all** | The three source downloads plus Create documents already cached for the active video and backend | Collecting available outputs without new LLM calls |
 
-Generated Create outputs have their own **Download as Markdown** action. Bundles exclude
-the uploaded video, Qdrant data, job history, and unreferenced files.
+Every filename starts with a safe form of the original video stem, such as
+`My_Lecture_notes.md`, `My_Lecture_blog_post.md`, or
+`My_Lecture_all_downloads.zip`. Generated Create outputs retain their own **Download as
+Markdown** action. Download all does not generate missing documents; it includes only
+the versions already cached for the selected backend. Exports exclude the uploaded
+video, Qdrant data, job history, and unreferenced files.
 
 ### Provider selection
 
@@ -163,14 +156,14 @@ changes:
 - Google `gemini-3.5-flash-lite` with medium thinking; or
 - Google `gemini-3.7-flash` with medium thinking.
 
-Provider credentials come from user environment variables or an optional gitignored
+Provider credentials come from environment variables or an optional gitignored
 `.env`. Existing environment values win. There is no automatic provider fallback, so a
-missing key or provider failure remains visible instead of silently changing models.
+missing key or provider failure stays visible. The app does not silently change models.
 
 ### Authentication and quota
 
-Adversal uses browser OAuth rather than an application API key. When any Adversal tool
-returns `AUTHENTICATION REQUIRED`, normal rendering stops and the app shows an
+Adversal uses browser OAuth, not an application API key. When an Adversal tool returns
+`AUTHENTICATION REQUIRED`, the app pauses and shows an
 **Authenticate** action:
 
 - locally, the browser flow opens on the computer running Streamlit;
@@ -195,8 +188,8 @@ lock and atomic replacement.
 - **Danger zone → Clear all runs** closes the embedded Qdrant client and permanently
   deletes uploads, jobs, notes, frames, and vectors after explicit confirmation.
 
-Generated documents and Ask chat history are session-scoped; source artifacts, jobs,
-and vectors are durable.
+Generated documents and Ask chat history stay in the session instead of being persisted.
+Source artifacts, jobs, and vectors are durable.
 
 ### Logging and diagnostics
 
@@ -227,9 +220,9 @@ and common token formats are redacted.
 [![Video Summarizer system architecture](./docs/diagrams/system-architecture.svg)](./docs/diagrams/video-summarizer-architecture.html)
 
 The Streamlit app launches a fresh `adversal-cli` MCP subprocess for each submission,
-status, quota, or authentication call. Adversal's local registry retains remote request
-state, so a new subprocess can poll an earlier `request_id`. Completed artifacts become
-the shared input for four workspace views:
+status, quota, or authentication call. Adversal's local registry keeps the remote request
+state, so a new subprocess can poll an earlier `request_id`. Completed artifacts feed
+four workspace views:
 
 | View | Responsibility |
 | --- | --- |
@@ -302,6 +295,7 @@ fallback and never overrides existing environment variables.
 | `AGNES_API_KEY` | Agnes AI chat | For Agnes |
 | `GOOGLE_API_KEY` | Gemini chat | For Gemini |
 | `VIDEO_SUMMARIZER_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` | No; defaults to `INFO` |
+| `VIDEO_SUMMARIZER_DATA_DIR` | Persistent container-data root | No; container defaults to `/data` |
 
 Configured model choices:
 
@@ -353,13 +347,13 @@ retention period; use **Danger zone → Clear all runs** when it is no longer ne
 The repository includes a Docker image and entrypoint for a **private, single-user**
 Hugging Face Space. A private bucket is mounted at `/data` so these survive restarts:
 
-- `/data/runs` — uploaded videos, jobs, Markdown, frames, and Qdrant data;
-- `/data/adversal` — Adversal OAuth state and local request registry; and
-- `/data/logs` — rotating application logs.
+- `/data/runs`: uploaded videos, jobs, Markdown, frames, and Qdrant data;
+- `/data/adversal`: Adversal OAuth state and local request registry; and
+- `/data/logs`: rotating application logs.
 
-The target bucket `pypi-ahmad/video-summarizer-data` exists. The target Space has not
-been created because Docker Space creation currently requires Hugging Face PRO. See the
-[deployment procedure](./docs/HOW_TO.md#deploy-to-hugging-face-spaces).
+Creating a Docker Space requires a paid Hugging Face plan. See the
+[deployment procedure](./docs/HOW_TO.md#deploy-to-hugging-face-spaces) for the checked-in
+target configuration.
 
 > [!WARNING]
 > Do not deploy this application publicly or for several users. Visitors would share one
@@ -419,7 +413,7 @@ For module ownership and safe change paths, read the
 ## Current limitations
 
 - One video workspace is active per browser session.
-- Generated documents and chat history are session-scoped rather than persisted.
+- Generated documents and chat history stay in the session and are not persisted.
 - Embedded Qdrant and `jobs.json` locking support one server process only.
 - Public video URLs do not have an application-level host or private-network policy.
 - There is no automatic provider fallback, retention cleanup, or application-level
@@ -438,6 +432,17 @@ For module ownership and safe change paths, read the
 | Develop or operate the system | [Technical guide](./docs/TECHNICAL_GUIDE.md) |
 | Browse architecture diagrams | [Architecture index](./docs/ARCHITECTURE.md) |
 | Onboard into the codebase | [Codebase documentation](./docs/codebase/ARCHITECTURE.md) |
+| Browse every page offline | [Interactive HTML docs](./docs/site.html) |
+
+The [interactive HTML docs](./docs/site.html) are a self-contained, hash-routed site
+with a zero-to-mastery learning path. Rebuild it after Markdown changes with:
+
+```bash
+uv run python scripts/build_docs_site.py
+```
+
+Use `uv run python scripts/build_docs_site.py --check` to verify that the checked-in
+HTML is synchronized with the tracked Markdown files.
 
 ## Getting help
 

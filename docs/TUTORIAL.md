@@ -1,8 +1,8 @@
 # Tutorial: process your first video
 
-This tutorial takes you from a fresh checkout to a completed video workspace. You will
-process one video with Adversal, inspect its notes and frames, ask a grounded question,
-and create a downloadable document.
+Follow this tutorial from a fresh checkout to a completed video workspace. You will
+process one video with Adversal, inspect its notes and frames, ask a question with source
+excerpts, and create a document you can download.
 
 ## What you will build
 
@@ -13,10 +13,10 @@ By the end, one source video will provide:
 - a grounded answer with chapter sources; and
 - an LLM-generated document such as a quiz or meeting summary.
 
-The video is processed once. Every later view reuses the same Adversal result.
+The app processes the video once. Each later view reuses that Adversal result.
 
-This is a learning exercise, not a reference manual. Keep the default analysis settings
-and use a short, non-sensitive video whose contents you can verify.
+This walkthrough keeps the default analysis settings. Use a short, non-sensitive video
+whose contents you can verify.
 
 ## Before you begin
 
@@ -37,7 +37,7 @@ ffmpeg -version
 ffprobe -version
 ```
 
-Both commands should print version information.
+Each command should print version information.
 
 ## 1. Start the application
 
@@ -73,11 +73,10 @@ address shown in the terminal, normally `http://localhost:8501`.
 5. Select **Process video**.
 
 If Adversal requests authentication, select **Authenticate** and complete the browser
-flow on the same computer that runs Streamlit. The application then resumes through a
-new Streamlit run.
+flow on the same computer that runs Streamlit. The app resumes after the sign-in flow.
 
 The status panel checks Adversal every eight seconds. You can close the browser and
-later resume the saved request from the sidebar because its job record is stored in
+resume the saved request later from the sidebar because its job record is stored in
 `runs/jobs.json`.
 
 **Checkpoint:** while analysis is active, the page shows `RUNNING` and a last-checked
@@ -92,6 +91,8 @@ When processing completes, the **Notes** view opens.
 2. Scroll through the chaptered Markdown.
 3. Open **Key frames** and inspect the extracted screenshots.
 4. Return to **Notes** and download the Markdown or one of the ZIP bundles.
+5. Select **Download all** beside the workspace title to collect all three source
+   downloads in one ZIP.
 
 The native bundle contains `notes.md` and only the local images referenced by those
 notes. The OKF 0.2 bundle reorganizes the same material into a video concept, chapter
@@ -115,8 +116,8 @@ useful visual changes.
 
 The app embeds chapter-aware chunks with OpenAI `text-embedding-3-small`, stores them
 under `runs/qdrant`, retrieves the five nearest chunks for the active request, and asks
-the selected chat model to answer only from those excerpts. Similarity is not proof;
-verify important answers against the notes or original video.
+the selected chat model to answer only from those excerpts. A similarity score is not
+proof, so verify important answers against the notes or original video.
 
 **Checkpoint:** the answer includes chapter-based grounding, and **Sources** lists up
 to five retrieved headings with timestamps when available and similarity scores.
@@ -127,10 +128,13 @@ to five retrieved headings with timestamps when available and similarity scores.
 2. Select **Quiz and flashcards** or another output.
 3. Review the generated Markdown and its source-notes expander.
 4. Select **Download as Markdown**.
+5. Select **Download all**. The ZIP now includes this cached document without another
+   model call.
 
-The generated document is cached for this browser session by request ID and selected
-backend. Switching backend creates another version. It does not process the video
-again.
+The app caches the generated document for this browser session by request ID and
+selected backend. Switching backends creates another version, but does not process the
+video again. Download filenames use the safe original video stem followed by the output
+type.
 
 For the quiz workflow, confirm that the document contains ten questions, a separate
 answer key, and fifteen flashcards. Those counts are part of the workflow contract.
@@ -141,7 +145,6 @@ Select **Process another video** to leave the current workspace without deleting
 files. To remove all local videos, notes, history, and Qdrant data, use **Danger zone**
 in the sidebar and confirm **Clear all runs**.
 
-You have now completed the full process-once workflow. For focused operational tasks,
-continue with [How-to guides](./HOW_TO.md). For exact settings and contracts, see the
-[Reference](./REFERENCE.md). Developers and operators should continue with the
-[technical guide](./TECHNICAL_GUIDE.md).
+For focused operational tasks, continue with [How-to guides](./HOW_TO.md). For exact
+settings and contracts, see the [Reference](./REFERENCE.md). Developers and operators
+can continue with the [technical guide](./TECHNICAL_GUIDE.md).

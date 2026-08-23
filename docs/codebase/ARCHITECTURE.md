@@ -4,9 +4,9 @@
 
 ### 1) Architectural Style
 
-- Primary style: small layered Streamlit application with adapters around external services.
-- Classification: UI orchestration (`app.py`) calls workflow/persistence (`pipeline.py`), artifact/export logic (`artifacts.py`), feature renderers (`modes.py`), Qdrant storage (`vector_store.py`), and integration adapters.
-- Primary constraints: trusted single-user/single-process target; Streamlit reruns; multi-minute asynchronous Adversal jobs; file-backed resumability; fresh MCP subprocess per tool call; optional private Docker deployment with a persistent `/data` mount.
+- Style: a small layered Streamlit application with adapters around external services.
+- Structure: UI orchestration (`app.py`) calls workflow and persistence (`pipeline.py`), artifact and export logic (`artifacts.py`), feature renderers (`modes.py`), Qdrant storage (`vector_store.py`), and integration adapters.
+- Constraints: one trusted user and one process; Streamlit reruns; multi-minute asynchronous Adversal jobs; file-backed resume support; a fresh MCP subprocess per tool call; and an optional private Docker deployment with a persistent `/data` mount.
 
 ### 2) System Flow
 
@@ -20,7 +20,7 @@ Streamlit widget -> local upload or public URL -> adversal-cli over MCP stdio
 2. `app.py:render_submit_form()` stores an upload under `runs/<job>/` or passes a URL, then calls `pipeline.submit_job()`.
 3. `pipeline.submit_job()` calls `adversal_client.process_video()`, extracts a request ID, creates a `Job`, and persists it in `runs/jobs.json`.
 4. `pipeline.render_job_progress()` polls `check_video_status()` every 8 seconds through `st.fragment`; terminal status is persisted and triggers rerender.
-5. Completed jobs expose Notes, Key frames, Ask, and Create; `modes.CREATE_RENDERERS` selects one of seven generated outputs.
+5. Completed jobs expose Notes, Key frames, Ask, and Create. `modes.CREATE_RENDERERS` selects one of seven generated outputs, and the workspace header packages core and already-cached outputs through Download All.
 6. Ask embeds chapter-aware chunks with OpenAI and stores/searches them in local Qdrant with a request-ID filter.
 7. `llm.chat()` dispatches grounded prompts to OpenAI, Agnes through the OpenAI-compatible client, or Gemini.
 
@@ -32,8 +32,8 @@ Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED`
 |-----------------|------|--------------|----------|
 | Presentation/orchestration (`app.py`) | Widgets, active workspace routing, destructive-run confirmation | MCP protocol and provider SDK construction | `app.py` |
 | Workflow/persistence (`pipeline.py`) | `Job`, status polling, local JSON/file paths, common rendering | Mode-specific prompts and provider credentials | `pipeline.py` |
-| Artifact layer (`artifacts.py`) | Safe frame resolution and native/OKF exports | UI state or remote service calls | `artifacts.py` |
-| Feature layer (`modes.py`) | Prompts, chunking, RAG chat and generated-output UI | Adversal transport | `modes.py` |
+| Artifact layer (`artifacts.py`) | Safe frame resolution, portable filenames, native/OKF exports, and Download All packaging | UI state or remote service calls | `artifacts.py` |
+| Feature layer (`modes.py`) | Prompts, chunking, RAG chat, generated-output UI, and active-backend cache discovery | Adversal transport | `modes.py` |
 | Vector store (`vector_store.py`) | Qdrant collection, indexing, payload filtering and retrieval | Chat generation or Streamlit UI | `vector_store.py` |
 | Adversal adapter (`adversal_client.py`) | MCP subprocess/session, tool calls, tool-error translation | Streamlit rendering | `adversal_client.py` |
 | LLM adapter (`llm.py`) | Environment-backed clients, model dispatch, embeddings | Job/session persistence | `llm.py` |
@@ -50,6 +50,7 @@ Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED`
 | Streamlit session cache | Generated documents, index-ready markers and chats in `modes.py` | Preserves generated state across reruns for one browser session |
 | Persistent vector store | `runs/qdrant/` through `vector_store.py` | Reuses embeddings across sessions and filters retrieval by active request |
 | File-backed registry | `runs/jobs.json` | Resumes Adversal jobs after app restart |
+| Deferred export composition | `app.render_workspace()`, `artifacts.build_all_downloads_bundle()` | Builds the aggregate ZIP only when clicked and makes no provider call |
 
 ### 5) Known Architectural Risks
 

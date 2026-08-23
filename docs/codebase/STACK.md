@@ -13,7 +13,7 @@
 
 ### 2) Production Frameworks and Dependencies
 
-Versions below are the resolved versions reported by `uv tree --depth 1` on 2026-08-23.
+The versions below came from `uv tree --depth 1` on 2026-08-23.
 
 | Dependency | Version | Role in system | Evidence |
 |------------|---------|----------------|----------|
@@ -56,7 +56,8 @@ Windows bootstrap and launch: `launch.cmd`.
 - `OPENAI_API_KEY` is also required for knowledge-base embeddings regardless of selected chat backend.
 - Runtime constraints: `uv`, Python 3.13+, `adversal-cli`, and `ffmpeg`/`ffprobe` on `PATH`; OAuth opens a browser on the server machine.
 - `VIDEO_SUMMARIZER_LOG_LEVEL` optionally selects `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`; default `INFO`.
-- Docker deployment maps persistent `/data` subdirectories to runs, Adversal state, and logs. `.github/workflows/ci.yml` defines a Windows quality gate.
+- `VIDEO_SUMMARIZER_DATA_DIR` optionally changes the container persistence root; default `/data`.
+- Docker deployment maps persistent data subdirectories to runs, Adversal state, and logs. `.github/workflows/ci.yml` defines a Windows quality gate.
 
 ### 6) Evidence
 

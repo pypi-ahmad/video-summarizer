@@ -22,25 +22,26 @@
 | Risk | OWASP category | Evidence | Current mitigation | Gap |
 |------|----------------|----------|--------------------|-----|
 | User-controlled public URL reaches downloader | A10 SSRF | `app.py`, `adversal_client.py`, `uv.lock` | Supported deployment is private and single-user | No scheme/host/network validation in this layer; downstream behavior is unverified |
-| Raw integration errors shown in UI | A09 Security Logging and Monitoring Failures / information exposure | `app.py:42-45,55-61,120-124,130-134` | Keys are not logged by application code | Error-redaction contract is absent |
+| Raw integration errors shown in UI | A09 Security Logging and Monitoring Failures / information exposure | `app.py` error handlers and `modes.py` provider calls | Keys are not logged by application code | Error-redaction contract is absent |
 
 ### 4) Performance and Scaling Concerns
 
 | Concern | Evidence | Current symptom | Scaling risk | Suggested improvement |
 |---------|----------|-----------------|-------------|-----------------------|
-| Fresh MCP subprocess for every 8-second poll | `adversal_client.py:38-54`, `pipeline.py:118-140` | Process startup per poll | CPU/process overhead across sessions | Keep current simple design for local use; measure before changing |
+| Fresh MCP subprocess for every 8-second poll | `adversal_client._call_tool()`, `pipeline.render_job_progress()` | Process startup per poll | CPU/process overhead across sessions | Keep current simple design for local use; measure before changing |
 | Full JSON registry rewrite per status change | `pipeline.py` | O(number of jobs) write | Slower as history grows | Use a database only when measured scale requires it |
 | Embedded Qdrant local mode | `vector_store.py` | Serialized in-process access | Not suitable for multiple app processes or large shared corpora | Move the same client API to Qdrant Server or Cloud when deployment scope changes |
 
 ### 5) Fragile/High-Churn Areas
 
-The repository history is only eight commits on 2026-08-23. `README.md`, `.gitignore`, and `pipeline.py` have two recorded touches; most other files have one, so churn is too shallow to distinguish stable from fragile areas reliably.
+The repository history remains shallow and concentrated in a short development window,
+so churn counts are too volatile to distinguish stable from fragile areas reliably.
 
 | Area | Why fragile | Churn signal | Safe change strategy |
 |------|-------------|-------------|----------------------|
-| `app.py` + `pipeline.py` | Upload, persistence, polling and filesystem boundaries cross modules | `pipeline.py` has two touches; `app.py` one; low-confidence history | Keep focused path/persistence regressions passing |
-| `modes.py` | Seven renderers plus reduction, chunking, and RAG chat | Largest application source | Test pure generation/chunk functions and rerun behavior separately |
-| `adversal_client.py` | Async MCP task-group behavior has deliberate exception placement | One initial commit | Preserve outside-context exception translation; mock MCP responses |
+| `app.py` + `pipeline.py` | Upload, persistence, polling and filesystem boundaries cross modules | Low-confidence short history | Keep focused path/persistence regressions passing |
+| `modes.py` | Seven renderers plus reduction, chunking, and RAG chat | Broad feature responsibility | Test pure generation/chunk functions and rerun behavior separately |
+| `adversal_client.py` | Async MCP task-group behavior has deliberate exception placement | Integration boundary with limited live-test coverage | Preserve outside-context exception translation; mock MCP responses |
 
 ### 6) Confirmed Product Boundary
 

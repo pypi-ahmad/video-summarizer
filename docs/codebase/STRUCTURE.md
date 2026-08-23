@@ -9,8 +9,8 @@
 | `app.py` | Streamlit entry point, source submission and process-once workspace routing | `main()`, `render_submit_form()`, `render_workspace()` |
 | `adversal_client.py` | Stateless MCP stdio adapter around `adversal-cli` | `_call_tool()`, public wrapper functions |
 | `pipeline.py` | Job model, JSON persistence, polling, result loading and image-aware Markdown rendering | `Job`, `_save_job()`, `render_job_progress()` |
-| `artifacts.py` | Safe frame discovery and native/OKF exports | `find_local_images()`, `build_okf_bundle()` |
-| `modes.py` | Qdrant chunking/chat and seven LLM-generated outputs | `CREATE_RENDERERS`, `render_knowledge_base()` |
+| `artifacts.py` | Safe frame discovery, portable filenames, native/OKF exports, and Download All packaging | `download_filename()`, `build_all_downloads_bundle()` |
+| `modes.py` | Qdrant chunking/chat, seven generated outputs, and active-backend cache discovery | `CREATE_RENDERERS`, `cached_generated_documents()` |
 | `vector_store.py` | Persistent local Qdrant indexing and request-filtered search | `index_video()`, `search_video()` |
 | `llm.py` | OpenAI-compatible and Gemini provider dispatch; OpenAI embeddings | `LLM_OPTIONS`, `chat()`, `embed()` |
 | `observability.py` | Central terminal and rotating-file logging with secret redaction | `configure_logging()`, `log_failure()` |
@@ -19,6 +19,7 @@
 | `.dockerignore` | Excludes secrets, runtime data, development files, and docs from the image build context | ignore patterns |
 | `launch.cmd` | Self-contained Windows uv/Python/venv bootstrap and Streamlit launch | batch commands |
 | `launch.bat` | Legacy compatibility launcher without the pinned/locked guarantees of `launch.cmd` | batch commands |
+| `scripts/build_docs_site.py` | Builds the self-contained offline HTML documentation site from tracked Markdown | `build_site()`, `--check` |
 | `tests/` | Focused security, caching, persistence, and observability regressions | `tests/test_regressions.py`, `tests/test_observability.py` |
 | `docs/` | User guide, technical architecture, and codebase onboarding material | `docs/USAGE.md`, `docs/ARCHITECTURE.md` |
 | `runs/` | Gitignored runtime jobs, notes, images, index and `jobs.json` | `pipeline.RUNS_DIR`, `.gitignore` |
@@ -43,7 +44,8 @@
 | `llm.py` | LLM clients, model selection and embeddings | Streamlit state or job persistence |
 | `observability.py` | Logging configuration, sanitization, and failure metadata | User content or business workflows |
 
-These are observed boundaries, not enforced package rules.
+These boundaries describe the current code. The project does not enforce them with a
+package system.
 
 ### 4) Naming and Organization Rules
 
@@ -55,7 +57,7 @@ These are observed boundaries, not enforced package rules.
 
 ### 5) Evidence
 
-- repository scan output captured during documentation generation
+- repository scan used to write these documents
 - `app.py`
 - `pipeline.py`
 - `modes.py`

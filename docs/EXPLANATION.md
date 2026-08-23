@@ -1,7 +1,7 @@
 # Explanation: why the application is designed this way
 
-Video Summarizer separates expensive source understanding from inexpensive reuse. This
-page explains the design decisions behind that boundary and the tradeoffs they create.
+Video Summarizer separates video analysis from the work that follows. This page explains
+the design decisions behind that boundary and the tradeoffs they create.
 
 ## Process once, use many ways
 
@@ -10,9 +10,9 @@ tracks, creates structured Markdown, and selects important frames. Meeting summa
 quizzes, FAQs, and other outputs are different presentations of that same evidence; they
 do not need another pass over the raw video.
 
-The app therefore has one active video workspace rather than a separate processing job
+The app therefore has one active video workspace instead of a separate processing job
 for every output. Video type and frame density belong to source analysis. Notes, Key
-frames, Ask, and Create belong to reuse. This avoids duplicate processing time and keeps
+frames, Ask, and Create reuse that result. This avoids duplicate processing and keeps
 all derived outputs tied to one source artifact.
 
 ## Why Adversal sits behind MCP
@@ -33,19 +33,24 @@ OAuth remain integration dependencies that need focused testing.
 ## Artifacts are the source of truth
 
 The completed `notes.md` and its referenced images are the durable result of video
-understanding. The app renders them directly before offering any LLM transformation.
-This makes it possible to inspect what Adversal produced, verify generated documents,
-and export the evidence without requiring another model.
+understanding. The app renders them before offering any LLM transformation. Users can
+inspect what Adversal produced, verify generated documents, and export the evidence
+without another model call.
 
 The native bundle preserves that source shape. The OKF 0.2 bundle adds a portable
 knowledge structure: a root index, source metadata, chapter concepts, and assets. It is
 designed for downstream agents that work more reliably with bounded Markdown concepts
 than with a raw multi-hour video.
 
+Browser downloads keep the source recognizable without trusting it as a path. The app
+removes the video extension, converts unsafe separators to underscores, and appends the
+output type. **Download all** composes the existing notes, native bundle, OKF bundle,
+and generated documents already cached for the selected backend. The native and OKF
+ZIPs stay nested so their internal contracts do not change.
+
 Image paths are treated as untrusted input. Rendering and export resolve each reference
-against the job directory and reject paths outside it. That rule prevents a generated
-or altered Markdown file from exposing unrelated local files through Streamlit or ZIP
-downloads.
+against the job directory and reject paths outside it. That rule keeps generated or
+altered Markdown from exposing unrelated local files through Streamlit or ZIP downloads.
 
 ## Why retrieval uses Qdrant
 
@@ -59,7 +64,7 @@ mandatory request-ID filter limits every query to the active source. A notes has
 deterministic point IDs make repeated indexing idempotent and allow changed notes to
 replace only their own points.
 
-Retrieval narrows evidence; it does not guarantee truth. The final answer is still
+Retrieval narrows the evidence; it does not guarantee truth. The final answer is still
 model-generated, so the UI exposes source headings, timestamps when available,
 similarity scores, and full notes for verification.
 
@@ -94,8 +99,11 @@ app into a multi-user database system. Generated documents are cheap enough to r
 and are keyed by request and provider to prevent repeated paid calls during ordinary
 Streamlit reruns.
 
-The tradeoff is visible: restarting a browser session can restore a saved video and its
-vectors, but not its previous conversation or generated drafts.
+Download all reads only those existing cache entries. It never generates missing
+documents, so collecting files cannot silently trigger additional provider cost.
+
+The tradeoff is straightforward: restarting a browser session can restore a saved video
+and its vectors, but not its previous conversation or generated drafts.
 
 ## Why the app targets one trusted process
 
@@ -117,7 +125,7 @@ Longer notes are condensed in batches no larger than 30,000 characters before th
 prompt. This bounds individual requests and reduces context pressure while preserving
 grounded facts and, for visual documents, Markdown image references.
 
-Reduction is intentionally separate from retrieval. Ask needs the most relevant
+Reduction is separate from retrieval. Ask needs the most relevant
 excerpts for one question; document generation needs broad coverage of the whole video.
 They solve different context problems.
 

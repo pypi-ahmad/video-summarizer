@@ -10,6 +10,7 @@
 | Functions/methods | Snake case; leading underscore for module-private helpers | `_extract_status`, `render_submit_form` | `pipeline.py`, `app.py` |
 | Types/interfaces | Pascal case; dataclasses for plain records; `Literal` aliases for bounded strings | `Job`, `Chunk`, `VideoType` | `pipeline.py`, `modes.py`, `adversal_client.py` |
 | Constants/env vars | Upper snake case | `POLL_INTERVAL_SECONDS`, `OPENAI_API_KEY` | `pipeline.py`, `.env.example` |
+| Browser downloads | Safe source stem, underscore, output type, extension | `My_Lecture_blog_post.md` | `artifacts.download_filename()` |
 
 ### 2) Formatting and Linting
 

@@ -1,7 +1,7 @@
 # How-to guides
 
-Use these recipes when you already know the application and need to complete a
-specific task. For a guided first run, start with the [tutorial](./TUTORIAL.md).
+Use these recipes when you know the basics and need to complete a specific task. For a
+first run, start with the [tutorial](./TUTORIAL.md).
 
 ## Choose a recipe
 
@@ -17,7 +17,7 @@ specific task. For a guided first run, start with the [tutorial](./TUTORIAL.md).
 
 ## Start on Windows
 
-Run the canonical launcher from the repository root:
+Run the recommended launcher from the repository root:
 
 ```bat
 launch.cmd
@@ -25,8 +25,8 @@ launch.cmd
 
 It installs the required uv-managed Python, creates `.venv`, synchronizes the locked
 environment, creates `.env` when needed, warns about missing FFmpeg tools, and starts
-Streamlit. The older `launch.bat` is retained for compatibility but does not provide
-the same pinned and locked setup guarantees.
+Streamlit. The older `launch.bat` remains for compatibility, but it does not pin Python
+or use the same locked setup.
 
 ## Start manually
 
@@ -47,7 +47,7 @@ Copy-Item .env.example .env
 
 ## Authenticate Adversal locally
 
-Authentication is requested only when an Adversal operation needs it.
+The app asks for authentication only when an Adversal operation needs it.
 
 1. Start the app and submit a video or open **Quota** and select
    **Check remaining quota**.
@@ -60,8 +60,8 @@ If authentication fails, keep the launch terminal open and use the newest sign-i
 
 ## Deploy to Hugging Face Spaces
 
-The supported hosted configuration is a private Docker Space with a private bucket.
-Public or protected deployment is unsafe because all visitors would share the same
+The hosted setup is a private Docker Space with a private bucket. Public or protected
+deployment is unsafe because all visitors would share the same
 Adversal account, run history, uploaded files, Qdrant index, and deletion control.
 The Hugging Face account must have a PRO subscription before it can create a Docker
 Space, even when the selected hardware is CPU Basic.
@@ -73,15 +73,17 @@ The deployment target is:
 - Bucket mount: `/data`
 - Streamlit port: `7860`
 
-The private bucket exists. The Space is not yet created because the target Hugging Face
-account does not currently meet the PRO requirement. The repository's Docker files are
-ready to publish after that requirement is met.
+The repository's Docker files are ready to publish after the account and target storage
+are configured. This guide describes the intended target, not its current deployment
+state.
 
 The container maps `/data/runs`, `/data/adversal`, and `/data/logs` to the paths used by
 the application and `adversal-cli`. Hugging Face restarts therefore preserve jobs,
 uploads, notes, frames, vectors, Adversal login state, and rotating logs.
+Set `VIDEO_SUMMARIZER_DATA_DIR` only when the persistent bucket is mounted somewhere
+other than `/data`.
 
-Configure provider credentials yourself in **Space Settings > Secrets**. Use only the
+Add provider credentials in **Space Settings > Secrets**. Use only the
 names below; do not commit or upload a `.env` file:
 
 ```text
@@ -121,8 +123,8 @@ AGNES_API_KEY=
 GOOGLE_API_KEY=
 ```
 
-Environment variables take precedence because `.env` is loaded without overriding
-them. Restart Streamlit after changing the environment.
+`.env` does not override existing environment variables. Restart Streamlit after
+changing the environment.
 
 - Use `OPENAI_API_KEY` for GPT-5.6 Luna and for all Ask embeddings.
 - Set `OPENAI_BASE_URL` only for an OpenAI-compatible gateway or proxy.
@@ -167,9 +169,9 @@ does not download the URL itself; it passes the URL to Adversal.
 - Use **Interview** for conversations and recorded Q&A.
 - Use **Meeting / webinar** for collaborative sessions and presentations.
 
-Choose **Minimal**, **Selective**, or **Generous** key frames according to how much
-visual context the resulting notes need. These choices affect the one source analysis,
-not which documents you can create afterward.
+Choose **Minimal**, **Selective**, or **Generous** key frames based on how much visual
+context the notes need. This choice affects source analysis, not the documents you can
+create afterward.
 
 ## Browse key frames
 
@@ -178,9 +180,8 @@ not which documents you can create afterward.
 3. When the analysis contains more than 12 referenced images, use **Frame page** to move
    through pages.
 
-The gallery includes only files referenced by the Markdown that resolve inside the job
-directory. If no safe referenced images exist, the app reports that the analysis did
-not return key frames.
+The gallery shows only Markdown references that resolve inside the job directory. If no
+safe referenced images exist, the app reports that the analysis returned no key frames.
 
 ## Download agent-ready artifacts
 
@@ -191,8 +192,14 @@ Open **Notes**, then choose:
   images; or
 - **Download OKF 0.2 bundle** for `index.md`, `video.md`, chapter concepts, and assets.
 
-The bundles exclude the uploaded video, Qdrant data, job history, and unreferenced
-files.
+Use **Download all** beside the workspace title to collect those three
+downloads plus any Create documents already generated for the active video and selected
+backend. It never generates missing documents or invokes an LLM.
+
+Download names use the safe original video stem and output type, for example
+`My_Lecture_notes.md`, `My_Lecture_okf_0_2_bundle.zip`, and
+`My_Lecture_all_downloads.zip`. Exports exclude the uploaded video, Qdrant data, job
+history, and unreferenced files.
 
 ## Search the active video
 
@@ -216,10 +223,11 @@ Open **Create** and choose one of these outputs:
 - Interview insight pack
 - FAQ/help-center article
 
-Each output is generated from the completed notes, displayed with access to the source
-notes, and downloadable as Markdown. Notes longer than 50,000 characters are first
-condensed in bounded batches. Image-oriented outputs preserve supported Markdown image
-references.
+Each output uses the completed notes, appears with the source notes, and can be
+downloaded as Markdown. Notes longer than 50,000 characters are first condensed in
+bounded batches. Image-oriented outputs preserve supported Markdown image references.
+After generation, the document is also included in **Download all** while that job and
+backend remain cached in the browser session.
 
 ## Resume a saved job
 
@@ -243,10 +251,10 @@ vectors remain on disk.
 ### Inspect live and saved logs
 
 Keep the `launch.cmd` terminal open to see Streamlit messages and application progress.
-The same application events are retained in `logs/video-summarizer.log`; older files
+The same events are retained in `logs/video-summarizer.log`; older files
 rotate to `.1`, `.2`, and `.3` when the active file reaches 5 MiB.
 
-For additional stack-frame locations and cache details, set:
+To include stack-frame locations and cache details, set:
 
 ```dotenv
 VIDEO_SUMMARIZER_LOG_LEVEL=DEBUG
@@ -284,9 +292,9 @@ uv run streamlit run app.py
 
 ### A public URL download times out
 
-Adversal downloads URL sources on its remote infrastructure. A long, protected, or slow
-source may exceed its download window before a request ID is created. Confirm that the
-URL is publicly reachable; if it still fails, download the video through an authorized
+Adversal downloads URL sources on its own infrastructure. A long, protected, or slow
+source may exceed the download window before a request ID is created. Confirm that the
+URL is publicly reachable. If it still fails, download the video through an authorized
 route and use **Upload file** instead.
 
 ### A completed job cannot render

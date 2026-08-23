@@ -32,6 +32,9 @@ jobs:
       - name: Lint
         run: uv run ruff check .
 
+      - name: Check documentation site
+        run: uv run python scripts/build_docs_site.py --check
+
       - name: Type check
         run: uv run ty check
 

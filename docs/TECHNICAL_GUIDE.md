@@ -1,8 +1,8 @@
 # Video Summarizer technical guide
 
-This guide is the implementation-oriented entry point for developers and operators. It
-describes how the application is assembled, how data moves through it, which contracts
-must remain stable, and how to run and diagnose it safely.
+This guide is the starting point for developers and operators. It explains how the
+application is assembled, how data moves through it, which contracts must remain stable,
+and how to run and diagnose it safely.
 
 For end-user procedures, use the [tutorial](./TUTORIAL.md) or
 [how-to guides](./HOW_TO.md). For exhaustive option and model tables, use the
@@ -18,7 +18,7 @@ and key frames for nine workflows:
 - meeting summary, content triage, and blog generation; and
 - quiz, SOP, interview-insight, and FAQ generation.
 
-The supported runtime is one trusted user and one Streamlit server process. It can run
+The supported runtime has one trusted user and one Streamlit server process. It can run
 on a local computer or in a private Hugging Face Docker Space. It is not a public,
 multi-user, or multi-process service.
 
@@ -43,8 +43,8 @@ Detailed views:
 | Model integration | `llm.py` | OpenAI, Agnes, Gemini, and OpenAI embedding clients |
 | Observability | `observability.py` | Terminal/file logging, rotation, levels, redaction |
 
-The modules are intentionally flat and layer-oriented. Keep provider SDK construction
-inside `llm.py`, MCP transport inside `adversal_client.py`, vector ownership inside
+The modules are flat and organized by layer. Keep provider SDK construction inside
+`llm.py`, MCP transport inside `adversal_client.py`, vector ownership inside
 `vector_store.py`, and Streamlit routing inside `app.py`.
 
 ### Application state routing
@@ -77,7 +77,7 @@ control.
 6. `COMPLETED` persists the completion time and exposes the workspace. `FAILED` persists
    the error. `UNKNOWN` continues polling.
 
-Authentication is a separate branch. An MCP response containing
+Authentication follows a separate branch. An MCP response containing
 `AUTHENTICATION REQUIRED` becomes `AdversalAuthRequiredError`; the app presents an
 authentication control, calls the MCP `authenticate` tool, and reruns.
 
@@ -152,14 +152,20 @@ use the dedicated `AdversalAuthRequiredError` type.
 
 ## Artifacts and exports
 
-The completed `notes.md` and its referenced frames are the source of truth. Derived LLM
-documents never replace them.
+The completed `notes.md` and its referenced frames are the authoritative artifacts.
+Derived LLM documents never replace them.
 
 Available exports:
 
 - Markdown only;
 - native ZIP containing Markdown and referenced local images; and
-- OKF 0.2 ZIP containing an index, video concept, chapter concepts, and assets.
+- OKF 0.2 ZIP containing an index, video concept, chapter concepts, and assets; and
+- a deferred Download all ZIP containing those core downloads plus generated documents
+  already cached for the active request and selected backend.
+
+Browser filenames follow `<safe-original-stem>_<download-type>.<extension>`. Download
+all never generates a missing document or invokes an LLM; the native and OKF archives
+remain nested so their established internal layouts do not change.
 
 Uploaded filenames are reduced to a basename and checked against the job directory.
 Markdown image paths are resolved relative to the job directory and rejected if they
@@ -217,6 +223,7 @@ Environment variables:
 | `AGNES_API_KEY` | Agnes chat |
 | `GOOGLE_API_KEY` | Gemini chat |
 | `VIDEO_SUMMARIZER_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` |
+| `VIDEO_SUMMARIZER_DATA_DIR` | Container persistent-data root; defaults to `/data` |
 
 `.env` is an optional local fallback. `python-dotenv` uses `override=False`, so inherited
 environment variables take precedence. Never commit `.env` or place secrets in Space
@@ -229,7 +236,7 @@ writes to stdout and `logs/video-summarizer.log`, rotates at 5 MiB, and keeps th
 backups. An invalid level falls back to `INFO` and produces a warning.
 
 Application events include operation names, component names, request IDs, selected
-models, counts, durations, states, and error types. They intentionally omit prompts,
+models, counts, durations, states, and error types. They omit prompts,
 transcripts, generated text, filenames, URLs, exception messages, and secret values.
 Known provider keys and common token formats are redacted by the logging filter.
 
@@ -259,13 +266,12 @@ uv run streamlit run app.py
 ### Private Hugging Face runtime
 
 `Dockerfile` builds a Python 3.13 image with uv and FFmpeg, runs as UID 1000, and starts
-Streamlit on port 7860. `container-entrypoint.sh` maps the persistent `/data` paths before
-launching the command.
+Streamlit on port 7860. `container-entrypoint.sh` maps the persistent data root before
+launching the command; `VIDEO_SUMMARIZER_DATA_DIR` can override its `/data` default.
 
 The target Space must remain private because all visitors would otherwise share one
 Adversal identity, job history, Qdrant collection, uploaded data, and destructive clear
-control. The private bucket exists; Space creation remains pending the Hugging Face PRO
-requirement.
+control. Creating a Docker Space requires a paid Hugging Face plan.
 
 ## Security model
 
@@ -300,6 +306,20 @@ suite.
 
 CI runs the same dependency sync, Ruff, ty, and pytest checks on Windows for pushes and
 pull requests targeting `main`.
+
+### Build the offline documentation site
+
+`scripts/build_docs_site.py` reads every tracked Markdown file and generates
+`docs/site.html`. The result is a self-contained hash-routed site, so it can be opened
+directly from a file browser without a web server or JavaScript package install.
+
+```bash
+uv run python scripts/build_docs_site.py
+uv run python scripts/build_docs_site.py --check
+```
+
+Run the first command after changing any Markdown page. The second command is a
+read-only synchronization check and should pass before committing documentation work.
 
 ### Runtime invariants to preserve
 
