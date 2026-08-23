@@ -17,6 +17,7 @@ import llm
 import modes
 import pipeline
 import vector_store
+import visual_evidence
 
 
 def test_upload_path_stays_inside_job_directory(tmp_path: Path) -> None:
@@ -317,6 +318,123 @@ def test_qdrant_index_is_idempotent_and_filtered_by_video(monkeypatch) -> None:
     assert [(hit.heading, hit.text) for hit in hits] == [("Alpha", "alpha content")]
     assert embedding_calls.count(["alpha content"]) == 1
     assert client.count(vector_store.COLLECTION_NAME, exact=True).count == 2
+
+
+def test_visual_evidence_is_resumable_and_path_safe(tmp_path: Path, monkeypatch) -> None:
+    image_dir = tmp_path / "frames"
+    image_dir.mkdir()
+    first = image_dir / "frame_00_10-slide.jpg"
+    second = image_dir / "frame_00_20-code.jpg"
+    first.write_bytes(b"first-image")
+    second.write_bytes(b"second-image")
+    (tmp_path / "notes.md").write_text(
+        "# Slides\n\n![Slide](frames/frame_00_10-slide.jpg)\n\n"
+        "* * *\n\n# Code\n\n![Code](frames/frame_00_20-code.jpg)\n\n"
+        "![Unsafe](../outside.jpg)",
+        encoding="utf-8",
+    )
+    job = pipeline.Job(
+        mode="Source analysis", request_id="visual-job", output_dir=str(tmp_path)
+    )
+    calls = []
+
+    def fake_describe(image, *, context, option_key):
+        calls.append((image.path.name, context, option_key))
+        if len(calls) == 2:
+            message = "provider rejected image"
+            raise RuntimeError(message)
+        return f"Description of {image.path.name}"
+
+    monkeypatch.setattr(visual_evidence.llm, "describe_image", fake_describe)
+
+    with pytest.raises(RuntimeError, match="provider rejected"):
+        visual_evidence.build_evidence(job, llm.DEFAULT_LLM_OPTION)
+
+    assert [item.relative_path for item in visual_evidence.load_evidence(job)] == [
+        "frames/frame_00_10-slide.jpg"
+    ]
+
+    monkeypatch.setattr(
+        visual_evidence.llm,
+        "describe_image",
+        lambda image, **_kwargs: f"Description of {image.path.name}",
+    )
+    completed = visual_evidence.build_evidence(job, llm.DEFAULT_LLM_OPTION)
+
+    assert len(completed) == 2
+    assert completed[0].timestamp == "00:10"
+    assert all("outside" not in item.relative_path for item in completed)
+
+
+def test_qdrant_searches_text_and_described_frames(monkeypatch) -> None:
+    client = QdrantClient(location=":memory:")
+
+    def fake_embed(texts):
+        return [
+            [1.0, 0.0] if "diagram" in text.lower() else [0.0, 1.0]
+            for text in texts
+        ]
+
+    monkeypatch.setattr(vector_store.llm, "embed", fake_embed)
+    frame = visual_evidence.FrameEvidence(
+        relative_path="frames/diagram.jpg",
+        alt="Architecture",
+        heading="System design",
+        timestamp="01:20",
+        content_hash="hash",
+        caption="A diagram linking the API to Qdrant.",
+        provider="openai",
+        model="vision-model",
+    )
+    vector_store.index_video(
+        request_id="mixed-job",
+        source_name="Demo",
+        notes="spoken notes",
+        chunks=[modes.Chunk("Transcript", "spoken notes", "00:10")],
+        frames=[frame],
+        evidence_hash="visual-hash",
+        client=client,
+    )
+
+    text_hits, frame_hits = vector_store.search_video_evidence(
+        "mixed-job", "diagram", client=client
+    )
+
+    assert [hit.kind for hit in text_hits] == ["text"]
+    assert [(hit.kind, hit.image_path) for hit in frame_hits] == [
+        ("frame", "frames/diagram.jpg")
+    ]
+
+
+def test_openai_multimodal_request_contains_image_data_url(tmp_path: Path, monkeypatch) -> None:
+    image_path = tmp_path / "frame.png"
+    image_path.write_bytes(b"png-bytes")
+    requests = []
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            requests.append(kwargs)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="description"))]
+            )
+
+    monkeypatch.setattr(
+        llm,
+        "_openai_client",
+        lambda: SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions())),
+    )
+
+    result = llm._chat_openai(
+        "vision-model",
+        "system",
+        "question",
+        [llm.ImageInput(image_path, "Frame 1")],
+    )
+
+    content = requests[0]["messages"][1]["content"]
+    assert result == "description"
+    assert content[1] == {"type": "text", "text": "Frame 1"}
+    assert content[2]["image_url"]["url"].startswith("data:image/png;base64,")
 
 
 def test_llm_result_is_cached_per_job_and_backend(monkeypatch) -> None:

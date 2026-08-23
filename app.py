@@ -306,6 +306,7 @@ def render_frames(job: Job) -> None:
 
 
 def render_create(job: Job) -> None:
+    modes.render_visual_index_controls(job)
     workflow = st.selectbox("Output", list(modes.CREATE_RENDERERS), key="create-workflow")
     modes.CREATE_RENDERERS[workflow](job)
 
