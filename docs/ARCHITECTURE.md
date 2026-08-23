@@ -117,9 +117,9 @@ Every mode shares one pipeline (`pipeline.submit_job` / `render_job_progress` / 
 | Mode | `type` | `images` | Post-processing |
 | --- | --- | --- | --- |
 | Study notes | `lesson` | `selective` | None - rendered as-is |
-| Meeting/webinar summarizer | `meeting` | `minimal` | `llm.chat()` &rarr; Decisions/Action Items digest |
+| Meeting/webinar summarizer | `meeting` | `minimal` | Session-cached `llm.chat()` &rarr; Decisions/Action Items digest |
 | Searchable knowledge base | `generic` | `selective` | Chunk + embed + cosine search + chat loop |
-| Content triage | `generic` | `minimal` | `llm.chat()` &rarr; watch/skim/skip digest |
+| Content triage | `generic` | `minimal` | Session-cached `llm.chat()` &rarr; watch/skim/skip digest |
 | Video &rarr; blog post | `lesson` | `generous` | Cached session draft &rarr; title/intro/conclusion |
 
 `modes.MODE_CONFIG` maps mode name to `(type, images)`; `modes.MODE_RENDERERS` maps mode name to its render function. `app.py` never branches on mode name directly beyond looking these two dicts up.
@@ -153,7 +153,7 @@ Agnes AI is OpenAI-compatible - `_agnes_client()` is just an `openai.OpenAI` cli
 
 ## Persistence
 
-`runs/<unix_ts>_<slug>/` holds an uploaded file under its submitted filename, `notes.md`, extracted images, and (for KB mode) `kb_index.npz`. `runs/jobs.json` is a flat dictionary keyed by `request_id`, holding every submitted `Job` via `dataclasses.asdict`. It is updated on submission and terminal status changes. This makes the sidebar's "Resume a previous job" picker work after a closed tab or restarted server.
+`runs/<unix_ts>_<uuid>_<slug>/` holds an uploaded file under its sanitized basename, `notes.md`, extracted images, and (for KB mode) `kb_index.npz`. `runs/jobs.json` is a flat dictionary keyed by `request_id`, holding every submitted `Job` via `dataclasses.asdict`. Updates use a process-local lock and replace a complete temporary file atomically. This makes the sidebar's "Resume a previous job" picker work after a closed tab or restarted server.
 
 ## Known limitations
 
@@ -161,8 +161,6 @@ Agnes AI is OpenAI-compatible - `_agnes_client()` is just an `openai.OpenAI` cli
 - **One job per mode.** No confirmation before a new submission overwrites the in-flight/completed job for that mode.
 - **No response schema guarantee.** The free-text response handling in `pipeline.py` (see above) is based on live-observed behavior, not a documented contract - Adversal could change response wording without notice.
 - **No automatic cleanup.** `runs/` grows indefinitely; the sidebar's "Clear all runs" is manual-only.
-- **Rerun cost.** Meeting and triage outputs are regenerated on every full Streamlit rerun while their completed job is selected. Blog drafts and KB indexes use session-state caches.
-- **Shared local persistence.** `jobs.json` uses an unlocked read-modify-write cycle and job directories use second-resolution names. Concurrent sessions can collide or lose updates.
-- **Path trust.** Uploaded filenames and Markdown image references are used as filesystem paths without enforcing containment inside the job directory.
-- **KB cache trust.** `kb_index.npz` is loaded with `allow_pickle=True`; only trusted local run directories should be opened until this is removed.
-- **No automated regression suite.** pytest is installed, but the repository currently has no tests or CI workflow. Ruff and ty are the only configured gates.
+- **Process-local persistence lock.** Concurrent Streamlit sessions in one process are serialized, but multiple server processes do not share the lock.
+- **Session-scoped generated output.** Meeting, triage, blog, and KB caches are lost when the Streamlit session ends.
+- **No CI workflow.** Focused pytest regressions exist locally, but no remote gate runs them automatically.

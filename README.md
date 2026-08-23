@@ -134,6 +134,7 @@ video-summarizer/
 ├── launch.bat             # One-file first-run setup + launch
 ├── .env.example           # Required environment variables, documented
 ├── pyproject.toml         # uv-managed dependencies
+├── tests/                 # Security, caching, and concurrent-persistence regressions
 ├── docs/
 │   ├── ARCHITECTURE.md    # Technical reference: modules, data flow, design decisions
 │   └── USAGE.md            # Step-by-step how-to guide for every mode

@@ -42,15 +42,15 @@ Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED`
 | Adapter | `adversal_client.py`, `llm.py` | Isolates MCP and provider SDK details from UI/features |
 | Strategy table | `llm._DISPATCH`, `modes.MODE_RENDERERS` | Selects provider or output behavior without branching chains |
 | Data transfer object | `pipeline.Job`, `modes.Chunk`, `llm.LLMOption` | Carries persisted job, retrieval and provider data |
-| Streamlit session cache | `blog_draft`, `kb_index`, `kb_chat` in `modes.py` | Preserves generated state across reruns for one browser session |
+| Streamlit session cache | Digests, blog drafts, KB indexes and chats in `modes.py` | Preserves generated state across reruns for one browser session |
 | File-backed registry | `runs/jobs.json` | Resumes Adversal jobs after app restart |
 
 ### 5) Known Architectural Risks
 
-- Local paths and `jobs.json` are shared process-wide while session state is per user; concurrent sessions can collide or lose read-modify-write updates.
-- Trust boundaries are implicit: uploaded filenames and generated Markdown image references become local filesystem paths without containment checks.
-- Meeting and triage renderers call paid LLMs during every rerun; unlike blog and knowledge-base paths, results are not cached.
-- No test or CI layer protects parsing, persistence, retrieval or integration-error behavior.
+- `jobs.json` locking is process-local; multiple server processes would not share it.
+- Generated mode caches are session-local and disappear when the browser session ends.
+- Meeting and triage caches include the selected backend in their key; blog drafts use only the request ID, so switching backend does not regenerate an existing draft.
+- Focused local regressions exist, but no CI layer runs them automatically.
 
 ### 6) Evidence
 
@@ -60,4 +60,4 @@ Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED`
 - `modes.py`
 - `adversal_client.py`
 - `llm.py`
-
+- `tests/test_regressions.py`

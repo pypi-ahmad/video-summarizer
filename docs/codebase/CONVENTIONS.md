@@ -36,9 +36,9 @@
 
 ### 5) Testing Conventions
 
-- pytest is installed, but no test files or fixtures exist.
-- Expected pytest naming defaults would be `test_*.py`; this is tool behavior, not a repository-established convention.
-- Mocking strategy: `[TODO]` no examples exist.
+- Tests live in `tests/` and use the `test_*.py` naming pattern.
+- Tests use plain `assert`, `tmp_path`, and `monkeypatch`; no shared `conftest.py` fixtures exist.
+- Regression tests name the behavior they protect, for example `test_upload_path_stays_inside_job_directory`.
 - Coverage expectation: `[TODO]` no coverage tool or threshold is configured.
 
 ### 6) Evidence
@@ -47,7 +47,7 @@
 - `app.py`
 - `pipeline.py`
 - `adversal_client.py`
+- `tests/test_regressions.py`
 - `.env.example`
 - `uv run ruff check .`
 - `uv run ty check`
-

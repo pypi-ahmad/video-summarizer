@@ -16,9 +16,9 @@
 
 | Store | Role | Access layer | Key risk | Evidence |
 |-------|------|--------------|----------|----------|
-| `runs/jobs.json` | Persistent request registry | `pipeline._load_all_jobs()`, `_save_job()` | Non-atomic shared read-modify-write and malformed-file failure | `pipeline.py` |
-| `runs/<job>/` | Uploaded video, `notes.md`, images and generated cache | `app.py`, `pipeline.Job` | Unbounded retention and path-containment gaps | `README.md`, `app.py`, `pipeline.py` |
-| `kb_index.npz` | Local embedding cache per job | `modes.build_or_load_kb_index()` | Loaded with `allow_pickle=True` | `modes.py` |
+| `runs/jobs.json` | Persistent request registry | `pipeline._load_all_jobs()`, `_save_job()` | Lock is process-local; malformed files still fail loading | `pipeline.py` |
+| `runs/<job>/` | Uploaded video, `notes.md`, images and generated cache | `app.py`, `pipeline.Job` | Unbounded retention; data is stored unencrypted | `README.md`, `app.py`, `pipeline.py` |
+| `kb_index.npz` | Local embedding cache per job | `modes.build_or_load_kb_index()` | Loaded without pickle; malformed caches still fail loading | `modes.py` |
 | Streamlit session state | Per-browser job pointers, drafts, index and chat history | `app.py`, `modes.py` | Lost on session expiry; separate from disk registry | source modules |
 
 No database, queue, event bus, service mesh or external cache is configured.
@@ -36,6 +36,7 @@ No database, queue, event bus, service mesh or external cache is configured.
 - No explicit retry, exponential backoff, timeout or circuit breaker is configured for Adversal or LLM calls.
 - Adversal status is polled every 8 seconds until `COMPLETED` or `FAILED`; `UNKNOWN` remains in polling state.
 - No fallback provider is selected automatically when an LLM call fails.
+- Meeting and triage outputs are cached by job and backend in session state; blog output is cached by job only.
 
 ### 5) Observability for Integrations
 
@@ -53,4 +54,3 @@ No database, queue, event bus, service mesh or external cache is configured.
 - `.env.example`
 - `README.md`
 - `uv.lock`
-

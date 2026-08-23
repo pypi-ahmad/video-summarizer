@@ -33,7 +33,7 @@ Versions below are the resolved versions reported by `uv tree --depth 1` on 2026
 | uv | Python, environment, dependency, and command management | `launch.bat`, `uv.lock` |
 | Ruff 0.16.4 | Linting and formatting | `pyproject.toml`, `uv tree --depth 1` |
 | ty 0.0.74 | Static type checking for Python 3.13 | `pyproject.toml`, `uv tree --depth 1` |
-| pytest 9.1.1 | Test runner; no tests currently exist | `pyproject.toml`, `uv run pytest -q` |
+| pytest 9.1.1 | Regression test runner | `pyproject.toml`, `tests/test_regressions.py` |
 
 ### 4) Key Commands
 
@@ -63,4 +63,3 @@ Windows bootstrap and launch: `launch.bat`.
 - `.env.example`
 - `launch.bat`
 - `llm.py`
-

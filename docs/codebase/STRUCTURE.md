@@ -12,6 +12,8 @@
 | `modes.py` | Five output modes, LLM post-processing, embedding index and search | `MODE_CONFIG`, `MODE_RENDERERS` |
 | `llm.py` | OpenAI-compatible and Gemini provider dispatch; OpenAI embeddings | `LLM_OPTIONS`, `chat()`, `embed()` |
 | `launch.bat` | Windows environment bootstrap and Streamlit launch | batch commands |
+| `tests/` | Focused security, caching, and persistence regressions | `tests/test_regressions.py` |
+| `docs/` | User guide, technical architecture, and codebase onboarding material | `docs/USAGE.md`, `docs/ARCHITECTURE.md` |
 | `runs/` | Gitignored runtime jobs, notes, images, index and `jobs.json` | `pipeline.RUNS_DIR`, `.gitignore` |
 | `docs/codebase/` | Generated codebase onboarding documents | this documentation set |
 
@@ -43,11 +45,11 @@ These are observed boundaries, not enforced package rules.
 
 ### 5) Evidence
 
-- `docs/codebase/.codebase-scan.txt` (scan-time tree; removed after documentation validation)
+- repository scan output captured during documentation generation
 - `app.py`
 - `pipeline.py`
 - `modes.py`
 - `adversal_client.py`
 - `llm.py`
 - `.gitignore`
-
+- `tests/test_regressions.py`

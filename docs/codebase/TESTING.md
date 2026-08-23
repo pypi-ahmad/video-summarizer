@@ -5,50 +5,48 @@
 ### 1) Test Stack and Commands
 
 - Primary test framework: pytest 9.1.1 is installed in the `dev` dependency group.
-- Assertion/mocking tools: pytest assertions are available; no mocking dependency or established mock pattern exists.
+- Assertion/mocking tools: pytest assertions and built-in `monkeypatch`.
 - Commands:
 
 ```bash
-uv run pytest -q              # exits with "no tests ran"
-uv run ruff check .           # passes
-uv run ty check               # passes
+uv run pytest -q
+uv run ruff check .
+uv run ty check
 # [TODO] no unit-only, integration/E2E, or coverage command exists
 ```
 
 ### 2) Test Layout
 
-- Test file placement: none exists.
-- Naming convention: `[TODO]` not established by repository examples.
-- Setup files: no `conftest.py`, pytest config, fixtures or CI workflow exists.
+- Test files live under `tests/` and use the `test_*.py` naming pattern.
+- `pyproject.toml` adds the repository root to pytest's Python path.
+- No `conftest.py`, shared fixtures, or CI workflow exists.
 
 ### 3) Test Scope Matrix
 
 | Scope | Covered? | Typical target | Notes |
 |-------|----------|----------------|-------|
-| Unit | No | Request/status parsing, chunking, cosine search, path handling | Pure functions exist but have no regression checks |
-| Integration | No | MCP adapter, provider dispatch, JSON/NPZ persistence | External SDK and filesystem boundaries are untested |
-| E2E | No | Upload/URL through completion and mode rendering | No Streamlit app tests or smoke automation exists |
+| Unit | Partial | Upload paths, Markdown images, NPZ loading, LLM caching | Five focused regressions exist |
+| Integration | Partial | Concurrent JSON persistence and directory allocation | Uses temporary local files; external services remain mocked/uncovered |
+| E2E | No | Upload/URL through completion and mode rendering | No automated live-service flow exists |
 
 ### 4) Mocking and Isolation Strategy
 
-- Main mocking approach: `[TODO]` none established.
-- Isolation guarantees: `[TODO]` no temporary `RUNS_DIR`, environment isolation or session-state reset fixture exists.
-- Likely isolation boundary: mock public functions in `adversal_client.py` and `llm.py`, and redirect filesystem paths to pytest `tmp_path`; this is a recommendation, not current behavior.
-- Common failure mode: absent tests allow parser, persistence, rerun-cost and path-containment regressions to ship undetected.
+- `monkeypatch` replaces session state, LLM calls, NumPy loading and pipeline paths.
+- `tmp_path` isolates uploaded files, indexes and job persistence.
+- External Adversal and provider calls are not made by the regression suite.
 
 ### 5) Coverage and Quality Signals
 
 - Coverage tool + threshold: `[TODO]` not configured.
-- Current reported coverage: `[TODO]` no coverage run is possible without tests.
+- Current reported coverage: `[TODO]` no coverage tool is configured.
 - Static quality: Ruff and ty pass on 2026-08-23.
-- Known gaps: every runtime flow; especially upload paths, Markdown images, MCP result parsing, job persistence, status transitions, LLM dispatch and KB indexing/search.
+- Known gaps: MCP result parsing, status transitions, full mode rendering, authentication and live provider behavior.
 
 ### 6) Evidence
 
 - `pyproject.toml`
 - `uv.lock`
-- `uv run pytest -q` output: `no tests ran in 0.01s`
+- `tests/test_regressions.py`
+- `uv run pytest -q`
 - `uv run ruff check .` output: `All checks passed!`
 - `uv run ty check` output: `All checks passed!`
-- CodeGraph reports no covering tests for core symbols.
-

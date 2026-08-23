@@ -108,7 +108,7 @@ Use for recorded meetings and webinars.
 - Adds a Decisions and Action Items digest above the complete notes.
 - Requires the selected chat-provider key.
 
-The digest is generated again after a full Streamlit rerun. Treat it as generated assistance, not an authoritative meeting record.
+The digest is cached for the current request and selected backend during the Streamlit session. Treat it as generated assistance, not an authoritative meeting record.
 
 ### Searchable knowledge base
 
@@ -169,7 +169,7 @@ The app stores data under:
 ```text
 runs/
 ├── jobs.json
-└── <timestamp>_<video-slug>/
+└── <timestamp>_<uuid>_<video-slug>/
     ├── <uploaded-video>
     ├── notes.md
     ├── <extracted-images>
@@ -224,5 +224,5 @@ Confirm its job directory and `notes.md` still exist. Clearing `runs/` invalidat
 - Adversal OAuth opens on the Streamlit server machine.
 - One selected job is held per mode in each Streamlit session; completed modes have no separate **New job** action.
 - Saved jobs and output files are shared under one local `runs/` directory.
-- Meeting and triage LLM output may repeat on full reruns.
+- Generated LLM output and KB indexes are cached only for the current Streamlit session.
 - No automatic cleanup, remote deployment workflow, or automated test suite exists.
