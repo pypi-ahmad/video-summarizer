@@ -283,7 +283,7 @@ def test_gemini_models_use_environment_and_medium_thinking(monkeypatch) -> None:
         assert call["config"].thinking_config.thinking_level == llm.genai_types.ThinkingLevel.MEDIUM
 
 
-def test_env_example_contains_only_blank_provider_values() -> None:
+def test_env_example_contains_safe_defaults() -> None:
     assignments = {
         name: value
         for line in Path(".env.example").read_text(encoding="utf-8").splitlines()
@@ -296,6 +296,7 @@ def test_env_example_contains_only_blank_provider_values() -> None:
         "OPENAI_BASE_URL": "",
         "AGNES_API_KEY": "",
         "GOOGLE_API_KEY": "",
+        "VIDEO_SUMMARIZER_LOG_LEVEL": "INFO",
     }
 
 

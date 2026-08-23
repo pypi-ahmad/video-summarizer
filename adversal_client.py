@@ -9,14 +9,19 @@ reruns.
 
 import asyncio
 import shutil
+import time
 from typing import Any, Literal
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import TextContent
 
+import observability
+
 VideoType = Literal["generic", "lesson", "interview", "meeting"]
 ImageDensity = Literal["minimal", "selective", "generous"]
+
+logger = observability.get_logger("adversal")
 
 
 class AdversalAuthRequiredError(Exception):
@@ -36,21 +41,48 @@ def _server_params() -> StdioServerParameters:
 
 
 async def _call_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any] | str:
-    params = _server_params()
-    async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
-        await session.initialize()
-        result = await session.call_tool(tool_name, arguments=arguments)
-        text = "\n".join(c.text for c in result.content if isinstance(c, TextContent))
-        is_error = result.isError
-        structured = result.structuredContent
+    started = time.perf_counter()
+    logger.info("tool.started tool=%s", tool_name)
+    try:
+        params = _server_params()
+        async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(tool_name, arguments=arguments)
+            text = "\n".join(c.text for c in result.content if isinstance(c, TextContent))
+            is_error = result.isError
+            structured = result.structuredContent
+    except Exception as exc:
+        observability.log_failure(
+            logger,
+            "tool",
+            exc,
+            tool=tool_name,
+            duration_ms=round((time.perf_counter() - started) * 1000),
+        )
+        raise
 
     # Raised outside the stdio_client/ClientSession `async with` block on purpose: anyio
     # wraps exceptions raised *inside* that block's task group in an ExceptionGroup, which
     # a plain `except AdversalError` at the call site would silently fail to catch.
     if "AUTHENTICATION REQUIRED" in text.upper():
+        logger.warning(
+            "tool.authentication_required tool=%s duration_ms=%s",
+            tool_name,
+            round((time.perf_counter() - started) * 1000),
+        )
         raise AdversalAuthRequiredError(text)
     if is_error:
+        logger.error(
+            "tool.remote_error tool=%s error_type=AdversalError duration_ms=%s",
+            tool_name,
+            round((time.perf_counter() - started) * 1000),
+        )
         raise AdversalError(text or "unknown adversal-cli error")
+    logger.info(
+        "tool.completed tool=%s duration_ms=%s",
+        tool_name,
+        round((time.perf_counter() - started) * 1000),
+    )
     return structured if structured is not None else text
 
 

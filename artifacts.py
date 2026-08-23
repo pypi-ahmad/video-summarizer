@@ -10,8 +10,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+import observability
 import pipeline
 from pipeline import Job
+
+logger = observability.get_logger("artifacts")
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -83,7 +86,14 @@ def build_native_bundle(job: Job) -> bytes:
         (image.relative_path.as_posix(), image.path.read_bytes())
         for image in find_local_images(notes, job.output_path)
     )
-    return _zip_bytes(files)
+    bundle = _zip_bytes(files)
+    logger.info(
+        "native_bundle.completed request_id=%s files=%s bytes=%s",
+        job.request_id,
+        len(files),
+        len(bundle),
+    )
+    return bundle
 
 
 def _yaml_value(value: object) -> str:
@@ -200,4 +210,12 @@ def build_okf_bundle(job: Job) -> bytes:
         (f"assets/{image.relative_path.as_posix()}", image.path.read_bytes())
         for image in images
     )
-    return _zip_bytes(files)
+    bundle = _zip_bytes(files)
+    logger.info(
+        "okf_bundle.completed request_id=%s chapters=%s assets=%s bytes=%s",
+        job.request_id,
+        len(sections),
+        len(images),
+        len(bundle),
+    )
+    return bundle

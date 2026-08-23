@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,7 @@ import streamlit as st
 from qdrant_client import QdrantClient, models
 
 import llm
+import observability
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -20,6 +22,8 @@ if TYPE_CHECKING:
 COLLECTION_NAME = "video_chunks_text_embedding_3_small_v1"
 DEFAULT_STORAGE_PATH = Path("runs") / "qdrant"
 _STORE_LOCK = threading.RLock()
+
+logger = observability.get_logger("qdrant")
 
 
 @dataclass(frozen=True)
@@ -79,7 +83,7 @@ def _ensure_collection(client: QdrantClient, vector_size: int) -> None:
     )
 
 
-def index_video(
+def _index_video(
     *,
     request_id: str,
     source_name: str,
@@ -102,6 +106,9 @@ def index_video(
                 exact=True,
             ).count
             if indexed == len(chunks):
+                logger.info(
+                    "index.reused request_id=%s chunks=%s", request_id, len(chunks)
+                )
                 return
 
         texts = [chunk.text for chunk in chunks]
@@ -140,7 +147,44 @@ def index_video(
         )
 
 
-def search_video(
+def index_video(
+    *,
+    request_id: str,
+    source_name: str,
+    notes: str,
+    chunks: Sequence[ChunkLike],
+    client: QdrantClient | None = None,
+) -> None:
+    """Log and idempotently index one video's chunks."""
+    started = time.perf_counter()
+    logger.info("index.started request_id=%s chunks=%s", request_id, len(chunks))
+    try:
+        _index_video(
+            request_id=request_id,
+            source_name=source_name,
+            notes=notes,
+            chunks=chunks,
+            client=client,
+        )
+    except Exception as exc:
+        observability.log_failure(
+            logger,
+            "index",
+            exc,
+            request_id=request_id,
+            chunks=len(chunks),
+            duration_ms=round((time.perf_counter() - started) * 1000),
+        )
+        raise
+    logger.info(
+        "index.completed request_id=%s chunks=%s duration_ms=%s",
+        request_id,
+        len(chunks),
+        round((time.perf_counter() - started) * 1000),
+    )
+
+
+def _search_video(
     request_id: str,
     query: str,
     *,
@@ -179,9 +223,42 @@ def search_video(
     return hits
 
 
+def search_video(
+    request_id: str,
+    query: str,
+    *,
+    top_k: int = 5,
+    client: QdrantClient | None = None,
+) -> list[SearchHit]:
+    """Log and return semantic matches from only the active video."""
+    started = time.perf_counter()
+    logger.info("search.started request_id=%s top_k=%s", request_id, top_k)
+    try:
+        hits = _search_video(request_id, query, top_k=top_k, client=client)
+    except Exception as exc:
+        observability.log_failure(
+            logger,
+            "search",
+            exc,
+            request_id=request_id,
+            top_k=top_k,
+            duration_ms=round((time.perf_counter() - started) * 1000),
+        )
+        raise
+    logger.info(
+        "search.completed request_id=%s hits=%s duration_ms=%s",
+        request_id,
+        len(hits),
+        round((time.perf_counter() - started) * 1000),
+    )
+    return hits
+
+
 def close_local_store() -> None:
     """Release Qdrant's Windows file lock before deleting local run data."""
+    logger.info("store.close_started")
     with _STORE_LOCK:
         client = get_client()
         client.close()
         get_client.clear()
+    logger.info("store.close_completed")

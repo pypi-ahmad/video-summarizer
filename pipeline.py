@@ -13,11 +13,14 @@ from pathlib import Path
 import streamlit as st
 
 import adversal_client
+import observability
 
 RUNS_DIR = Path("runs")
 JOBS_FILE = RUNS_DIR / "jobs.json"
 POLL_INTERVAL_SECONDS = 8
 JOBS_LOCK = threading.Lock()
+
+logger = observability.get_logger("pipeline")
 
 IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 REQUEST_ID_RE = re.compile(r'request[_ ]?id["\':\s]+([\w-]+)', re.IGNORECASE)
@@ -61,6 +64,7 @@ def _save_job(job: Job) -> None:
         temp_file = JOBS_FILE.with_suffix(".tmp")
         temp_file.write_text(json.dumps(all_jobs, indent=2), encoding="utf-8")
         temp_file.replace(JOBS_FILE)
+    logger.debug("job.persisted request_id=%s status=%s", job.request_id, job.status)
 
 
 def list_saved_jobs() -> list[Job]:
@@ -109,6 +113,7 @@ def submit_job(
     source_name: str = "Video",
     source_url: str | None = None,
 ) -> Job:
+    logger.info("job.submission_started video_type=%s image_density=%s", type, images)
     result = adversal_client.process_video(
         video_path=video_path,
         video_url=video_url,
@@ -127,6 +132,7 @@ def submit_job(
         image_density=images,
     )
     _save_job(job)
+    logger.info("job.submission_completed request_id=%s", request_id)
     return job
 
 
@@ -137,19 +143,23 @@ def render_job_progress() -> None:
         return
     if job.status != "RUNNING":
         return
+    logger.info("job.poll_started request_id=%s", job.request_id)
     with st.status(f"Processing {job.source_name}...", expanded=True):
         try:
             result = adversal_client.check_video_status(job.request_id)
         except adversal_client.AdversalAuthRequiredError:
+            logger.warning("job.poll_authentication_required request_id=%s", job.request_id)
             st.session_state.auth_required = True
             st.rerun()
             return
         except adversal_client.AdversalError as exc:
+            observability.log_failure(logger, "job.poll", exc, request_id=job.request_id)
             job.status, job.error = "FAILED", str(exc)
             _save_job(job)
             st.rerun()
             return
         status, error = _extract_status(result)
+        logger.info("job.poll_completed request_id=%s status=%s", job.request_id, status)
         st.write(f"Status: {status} - last checked {time.strftime('%H:%M:%S')}")
         if status in ("COMPLETED", "FAILED"):
             job.status, job.error = status, error

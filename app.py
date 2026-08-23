@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import re
 import shutil
 from pathlib import Path
@@ -14,10 +15,13 @@ import adversal_client
 import artifacts
 import llm
 import modes
+import observability
 import pipeline
 import vector_store
 from adversal_client import ImageDensity, VideoType
 from pipeline import Job
+
+logger = observability.get_logger("app")
 
 VIDEO_TYPES: dict[str, VideoType] = {
     "Generic": "generic",
@@ -58,14 +62,24 @@ def _url_source_name(url: str) -> str:
 def render_auth_banner_if_needed() -> bool:
     if not st.session_state.get("auth_required"):
         return False
-    st.warning("Adversal needs you to sign in. This opens a browser window on this machine.")
+    if os.environ.get("SPACE_ID"):
+        st.warning("Adversal needs you to sign in from this private Hugging Face Space.")
+        st.info(
+            "Open the Space runtime logs in another tab, then select Authenticate below. "
+            "Open the temporary Adversal URL printed in the logs and finish signing in."
+        )
+    else:
+        st.warning("Adversal needs you to sign in. This opens a browser window on this machine.")
     if st.button("Authenticate"):
+        logger.info("auth.started")
         with st.spinner("Waiting for browser sign-in to complete..."):
             try:
                 adversal_client.authenticate()
             except adversal_client.AdversalError as exc:
+                observability.log_failure(logger, "auth", exc)
                 st.error(str(exc))
                 return True
+        logger.info("auth.completed")
         st.session_state.auth_required = False
         st.rerun()
     return True
@@ -74,14 +88,18 @@ def render_auth_banner_if_needed() -> bool:
 def render_quota_sidebar() -> None:
     with st.sidebar.expander("Quota", expanded=False):
         if st.button("Check remaining quota"):
+            logger.info("quota.started")
             try:
                 quota = adversal_client.check_remaining_quota()
             except adversal_client.AdversalAuthRequiredError:
+                logger.warning("quota.authentication_required")
                 st.session_state.auth_required = True
                 st.rerun()
             except adversal_client.AdversalError as exc:
+                observability.log_failure(logger, "quota", exc)
                 st.error(str(exc))
             else:
+                logger.info("quota.completed")
                 st.write(quota)
 
 
@@ -93,6 +111,7 @@ def render_resume_picker() -> None:
         for job in sorted(saved, key=lambda item: item.submitted_at, reverse=True)[:10]:
             label = f"{job.source_name} - {job.status} - {job.request_id[:8]}"
             if st.button(label, key=f"resume-{job.request_id}"):
+                logger.info("job.resumed request_id=%s status=%s", job.request_id, job.status)
                 st.session_state.active_job = job
                 st.rerun()
 
@@ -101,14 +120,17 @@ def render_clear_runs() -> None:
     with st.sidebar.expander("Danger zone", expanded=False):
         confirm = st.checkbox("I understand this deletes all local run data")
         if st.button("Clear all runs", disabled=not confirm):
+            logger.warning("runs.clear_started")
             try:
                 vector_store.close_local_store()
                 shutil.rmtree(pipeline.RUNS_DIR, ignore_errors=False)
             except FileNotFoundError:
                 pass
             except OSError as exc:
+                observability.log_failure(logger, "runs.clear", exc)
                 st.error(f"Could not clear local run data: {exc}")
                 return
+            logger.warning("runs.clear_completed")
             st.session_state.clear()
             st.rerun()
 
@@ -141,6 +163,12 @@ def render_submit_form() -> None:
         return
 
     source_name = uploaded_file.name if uploaded_file else _url_source_name(video_url or "")
+    logger.info(
+        "job.submit_requested source_kind=%s video_type=%s image_density=%s",
+        "upload" if uploaded_file else "url",
+        VIDEO_TYPES[video_type_label],
+        IMAGE_DENSITIES[image_density_label],
+    )
     job_dir = pipeline.new_job_dir(slugify(source_name))
     video_path = None
     if uploaded_file:
@@ -163,11 +191,14 @@ def render_submit_form() -> None:
             source_url=video_url,
         )
     except adversal_client.AdversalAuthRequiredError:
+        logger.warning("job.submit_authentication_required")
         st.session_state.auth_required = True
         st.rerun()
     except adversal_client.AdversalError as exc:
+        observability.log_failure(logger, "job.submit", exc)
         st.error(str(exc))
     else:
+        logger.info("job.submit_completed request_id=%s", job.request_id)
         st.session_state.active_job = job
         st.rerun()
 
@@ -175,6 +206,7 @@ def render_submit_form() -> None:
 def render_failure(job: Job) -> None:
     st.error(f"Processing failed: {job.error or 'unknown error'}")
     if st.button("Start over"):
+        logger.info("job.start_over request_id=%s", job.request_id)
         st.session_state.active_job = None
         st.rerun()
 
@@ -183,6 +215,7 @@ def render_notes(job: Job) -> None:
     try:
         notes = pipeline.load_completed_notes(job)
     except FileNotFoundError:
+        logger.warning("notes.missing request_id=%s", job.request_id)
         st.error("Adversal marked this job complete, but its Markdown file is missing.")
         return
     images = artifacts.find_local_images(notes, job.output_path)
@@ -249,6 +282,7 @@ def render_workspace(job: Job) -> None:
     with st.container(horizontal=True, horizontal_alignment="distribute"):
         st.subheader(job.source_name)
         if st.button("Process another video", icon=":material/add:"):
+            logger.info("workspace.closed request_id=%s", job.request_id)
             st.session_state.active_job = None
             st.rerun()
     st.caption(
@@ -271,6 +305,7 @@ def render_workspace(job: Job) -> None:
 
 
 def main() -> None:
+    observability.configure_logging()
     st.set_page_config(page_title="Video Summarizer", layout="wide")
     st.session_state.setdefault("active_job", None)
 

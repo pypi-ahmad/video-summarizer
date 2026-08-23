@@ -10,6 +10,7 @@ affecting this one.
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from typing import Literal
 
@@ -17,6 +18,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types as genai_types
 from openai import OpenAI
+
+import observability
 
 load_dotenv(override=False)
 
@@ -42,6 +45,8 @@ LLM_OPTIONS: dict[str, LLMOption] = {
     "gemini-3.7-flash": LLMOption("Google - Gemini 3.7 Flash", "gemini", "gemini-3.7-flash"),
 }
 DEFAULT_LLM_OPTION = "openai-gpt-5.6-luna"
+
+logger = observability.get_logger("llm")
 
 
 def _require_env(name: str) -> str:
@@ -107,10 +112,63 @@ _DISPATCH = {"openai": _chat_openai, "agnes": _chat_agnes, "gemini": _chat_gemin
 
 def chat(system: str, user: str, option_key: str = DEFAULT_LLM_OPTION) -> str:
     option = LLM_OPTIONS[option_key]
-    return _DISPATCH[option.provider](option.model, system, user)
+    started = time.perf_counter()
+    logger.info(
+        "chat.started provider=%s model=%s input_chars=%s",
+        option.provider,
+        option.model,
+        len(system) + len(user),
+    )
+    try:
+        result = _DISPATCH[option.provider](option.model, system, user)
+    except Exception as exc:
+        observability.log_failure(
+            logger,
+            "chat",
+            exc,
+            provider=option.provider,
+            model=option.model,
+            duration_ms=round((time.perf_counter() - started) * 1000),
+        )
+        raise
+    logger.info(
+        "chat.completed provider=%s model=%s output_chars=%s duration_ms=%s",
+        option.provider,
+        option.model,
+        len(result),
+        round((time.perf_counter() - started) * 1000),
+    )
+    return result
 
 
 def embed(texts: list[str]) -> list[list[float]]:
     """Embeddings always use OpenAI - Agnes/Gemini weren't requested for this."""
-    response = _openai_client().embeddings.create(model=EMBED_MODEL, input=texts)
-    return [item.embedding for item in response.data]
+    started = time.perf_counter()
+    logger.info(
+        "embed.started model=%s items=%s input_chars=%s",
+        EMBED_MODEL,
+        len(texts),
+        sum(map(len, texts)),
+    )
+    try:
+        response = _openai_client().embeddings.create(model=EMBED_MODEL, input=texts)
+        embeddings = [item.embedding for item in response.data]
+    except Exception as exc:
+        observability.log_failure(
+            logger,
+            "embed",
+            exc,
+            model=EMBED_MODEL,
+            items=len(texts),
+            duration_ms=round((time.perf_counter() - started) * 1000),
+        )
+        raise
+    dimensions = len(embeddings[0]) if embeddings else 0
+    logger.info(
+        "embed.completed model=%s items=%s dimensions=%s duration_ms=%s",
+        EMBED_MODEL,
+        len(embeddings),
+        dimensions,
+        round((time.perf_counter() - started) * 1000),
+    )
+    return embeddings

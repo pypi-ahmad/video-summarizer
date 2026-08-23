@@ -45,6 +45,8 @@ where ffprobe >nul 2>nul
 if errorlevel 1 echo Warning: ffprobe is not on PATH; local video inspection may fail.
 
 echo Starting Video Summarizer from the project virtual environment...
+echo Live application logs will appear below.
+echo Persistent application log: %CD%\logs\video-summarizer.log
 "%VENV_DIR%\Scripts\python.exe" -m streamlit run app.py
 exit /b %ERRORLEVEL%
 

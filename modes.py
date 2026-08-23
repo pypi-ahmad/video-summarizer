@@ -9,6 +9,7 @@ import streamlit as st
 
 import artifacts
 import llm
+import observability
 import pipeline
 import vector_store
 from pipeline import Job
@@ -16,6 +17,8 @@ from pipeline import Job
 FRAME_TS_RE = re.compile(r"frame_(\d{2})_(\d{2})-")
 LONG_NOTES_THRESHOLD = 50_000
 REDUCTION_BATCH_CHARS = 30_000
+
+logger = observability.get_logger("modes")
 
 
 @dataclass
@@ -67,7 +70,20 @@ def _cached_chat(cache_name: str, job: Job, system: str, user: str) -> str:
     cache = st.session_state.setdefault(cache_name, {})
     key = (job.request_id, option_key)
     if key not in cache:
+        logger.info(
+            "document.cache_miss cache=%s request_id=%s backend=%s",
+            cache_name,
+            job.request_id,
+            option_key,
+        )
         cache[key] = llm.chat(system=system, user=user, option_key=option_key)
+    else:
+        logger.debug(
+            "document.cache_hit cache=%s request_id=%s backend=%s",
+            cache_name,
+            job.request_id,
+            option_key,
+        )
     return cache[key]
 
 
@@ -96,12 +112,22 @@ def _split_for_generation(text: str, max_chars: int = REDUCTION_BATCH_CHARS) -> 
 
 def _reduce_notes(notes: str, goal: str, *, preserve_images: bool) -> str:
     source = notes
+    round_number = 0
     image_instruction = (
         " Preserve every Markdown image reference exactly as written with its nearby context."
         if preserve_images
         else ""
     )
     while len(source) > LONG_NOTES_THRESHOLD:
+        round_number += 1
+        batches = _split_for_generation(source, REDUCTION_BATCH_CHARS)
+        logger.info(
+            "reduction.round_started round=%s input_chars=%s batches=%s preserve_images=%s",
+            round_number,
+            len(source),
+            len(batches),
+            preserve_images,
+        )
         summaries = [
             llm.chat(
                 system=(
@@ -113,9 +139,14 @@ def _reduce_notes(notes: str, goal: str, *, preserve_images: bool) -> str:
                 user=batch,
                 option_key=_active_llm_option(),
             )
-            for batch in _split_for_generation(source, REDUCTION_BATCH_CHARS)
+            for batch in batches
         ]
         reduced = "\n\n---\n\n".join(summaries)
+        logger.info(
+            "reduction.round_completed round=%s output_chars=%s",
+            round_number,
+            len(reduced),
+        )
         if len(reduced) >= len(source):
             return reduced
         source = reduced
@@ -134,6 +165,12 @@ def _cached_document(
     cache = st.session_state.setdefault(cache_name, {})
     key = (job.request_id, option_key)
     if key not in cache:
+        logger.info(
+            "document.generation_started cache=%s request_id=%s backend=%s",
+            cache_name,
+            job.request_id,
+            option_key,
+        )
         notes = pipeline.load_completed_notes(job)
         source = (
             _reduce_notes(notes, reduction_goal, preserve_images=preserve_images)
@@ -141,6 +178,19 @@ def _cached_document(
             else notes
         )
         cache[key] = llm.chat(system=system, user=source, option_key=option_key)
+        logger.info(
+            "document.generation_completed cache=%s request_id=%s backend=%s",
+            cache_name,
+            job.request_id,
+            option_key,
+        )
+    else:
+        logger.debug(
+            "document.cache_hit cache=%s request_id=%s backend=%s",
+            cache_name,
+            job.request_id,
+            option_key,
+        )
     return cache[key]
 
 
@@ -223,9 +273,12 @@ def render_blog_post(job: Job) -> None:
 def render_knowledge_base(job: Job) -> None:
     ready = st.session_state.setdefault("kb_ready", set())
     if job.request_id not in ready:
+        logger.info("knowledge_base.index_requested request_id=%s", job.request_id)
         with st.spinner("Building searchable index..."):
             build_or_load_kb_index(job)
         ready.add(job.request_id)
+    else:
+        logger.debug("knowledge_base.index_ready request_id=%s", job.request_id)
 
     if "kb_chat" not in st.session_state:
         st.session_state.kb_chat = {}
@@ -237,6 +290,11 @@ def render_knowledge_base(job: Job) -> None:
 
     question = st.chat_input("Ask something about the video")
     if question:
+        logger.info(
+            "knowledge_base.question_started request_id=%s question_chars=%s",
+            job.request_id,
+            len(question),
+        )
         history.append(("user", question))
         with st.chat_message("user"):
             st.markdown(question)
@@ -253,6 +311,12 @@ def render_knowledge_base(job: Job) -> None:
             option_key=_active_llm_option(),
         )
         history.append(("assistant", answer))
+        logger.info(
+            "knowledge_base.question_completed request_id=%s sources=%s answer_chars=%s",
+            job.request_id,
+            len(hits),
+            len(answer),
+        )
         with st.chat_message("assistant"):
             st.markdown(answer)
             with st.expander("Sources"):
