@@ -1,4 +1,4 @@
-"""Shared submit -> poll -> read-results pipeline used by all five modes."""
+"""Shared submit -> poll -> read-results pipeline used by all output modes."""
 
 from __future__ import annotations
 
@@ -32,6 +32,11 @@ class Job:
     status: str = "RUNNING"  # RUNNING | COMPLETED | FAILED
     error: str | None = None
     submitted_at: float = field(default_factory=time.time)
+    source_name: str = "Video"
+    source_url: str | None = None
+    video_type: adversal_client.VideoType = "generic"
+    image_density: adversal_client.ImageDensity = "selective"
+    completed_at: float | None = None
 
     @property
     def output_path(self) -> Path:
@@ -101,6 +106,8 @@ def submit_job(
     video_url: str | None,
     type: adversal_client.VideoType,  # noqa: A002 - matches adversal-cli's own parameter name
     images: adversal_client.ImageDensity,
+    source_name: str = "Video",
+    source_url: str | None = None,
 ) -> Job:
     result = adversal_client.process_video(
         video_path=video_path,
@@ -110,17 +117,27 @@ def submit_job(
         images=images,
     )
     request_id = _extract_request_id(result)
-    job = Job(mode=mode, request_id=request_id, output_dir=str(job_dir))
+    job = Job(
+        mode=mode,
+        request_id=request_id,
+        output_dir=str(job_dir),
+        source_name=source_name,
+        source_url=source_url,
+        video_type=type,
+        image_density=images,
+    )
     _save_job(job)
     return job
 
 
 @st.fragment(run_every=POLL_INTERVAL_SECONDS)
-def render_job_progress(mode: str) -> None:
-    job: Job = st.session_state.jobs[mode]
+def render_job_progress() -> None:
+    job: Job | None = st.session_state.get("active_job")
+    if job is None:
+        return
     if job.status != "RUNNING":
         return
-    with st.status(f"Processing your video ({mode})...", expanded=True):
+    with st.status(f"Processing {job.source_name}...", expanded=True):
         try:
             result = adversal_client.check_video_status(job.request_id)
         except adversal_client.AdversalAuthRequiredError:
@@ -136,6 +153,8 @@ def render_job_progress(mode: str) -> None:
         st.write(f"Status: {status} - last checked {time.strftime('%H:%M:%S')}")
         if status in ("COMPLETED", "FAILED"):
             job.status, job.error = status, error
+            if status == "COMPLETED":
+                job.completed_at = time.time()
             _save_job(job)
             st.rerun()
 

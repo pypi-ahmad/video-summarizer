@@ -18,7 +18,7 @@ from google import genai
 from google.genai import types as genai_types
 from openai import OpenAI
 
-load_dotenv()
+load_dotenv(override=False)
 
 EMBED_MODEL = "text-embedding-3-small"
 AGNES_BASE_URL = "https://apihub.agnes-ai.com/v1"
