@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
+import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -15,6 +17,7 @@ import adversal_client
 RUNS_DIR = Path("runs")
 JOBS_FILE = RUNS_DIR / "jobs.json"
 POLL_INTERVAL_SECONDS = 8
+JOBS_LOCK = threading.Lock()
 
 IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 REQUEST_ID_RE = re.compile(r'request[_ ]?id["\':\s]+([\w-]+)', re.IGNORECASE)
@@ -46,10 +49,13 @@ def _load_all_jobs() -> dict[str, dict]:
 
 
 def _save_job(job: Job) -> None:
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
-    all_jobs = _load_all_jobs()
-    all_jobs[job.request_id] = asdict(job)
-    JOBS_FILE.write_text(json.dumps(all_jobs, indent=2), encoding="utf-8")
+    with JOBS_LOCK:
+        RUNS_DIR.mkdir(parents=True, exist_ok=True)
+        all_jobs = _load_all_jobs()
+        all_jobs[job.request_id] = asdict(job)
+        temp_file = JOBS_FILE.with_suffix(".tmp")
+        temp_file.write_text(json.dumps(all_jobs, indent=2), encoding="utf-8")
+        temp_file.replace(JOBS_FILE)
 
 
 def list_saved_jobs() -> list[Job]:
@@ -57,7 +63,7 @@ def list_saved_jobs() -> list[Job]:
 
 
 def new_job_dir(slug: str) -> Path:
-    job_dir = RUNS_DIR / f"{int(time.time())}_{slug}"
+    job_dir = RUNS_DIR / f"{int(time.time())}_{uuid.uuid4().hex}_{slug}"
     job_dir.mkdir(parents=True, exist_ok=True)
     return job_dir
 
@@ -138,6 +144,14 @@ def load_completed_notes(job: Job) -> str:
     return job.notes_path.read_text(encoding="utf-8")
 
 
+def _resolve_local_image(base_dir: Path, src: str) -> Path | None:
+    resolved_base = base_dir.resolve()
+    image_path = (resolved_base / src).resolve()
+    if not image_path.is_relative_to(resolved_base) or not image_path.is_file():
+        return None
+    return image_path
+
+
 def render_markdown_with_images(markdown_text: str, base_dir: Path) -> None:
     """st.markdown does not resolve local image paths - render each segment explicitly."""
     pos = 0
@@ -145,8 +159,8 @@ def render_markdown_with_images(markdown_text: str, base_dir: Path) -> None:
         if match.start() > pos:
             st.markdown(markdown_text[pos : match.start()])
         alt, src = match.group(1), match.group(2)
-        image_path = (base_dir / src).resolve()
-        if image_path.exists():
+        image_path = _resolve_local_image(base_dir, src)
+        if image_path is not None:
             st.image(str(image_path), caption=alt or None)
         pos = match.end()
     if pos < len(markdown_text):

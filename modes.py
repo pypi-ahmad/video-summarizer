@@ -62,9 +62,9 @@ def build_or_load_kb_index(job: Job) -> tuple[list[Chunk], np.ndarray]:
     notes = pipeline.load_completed_notes(job)
     chunks = split_notes_into_chunks(notes)
     if cache_path.exists():
-        cached = np.load(cache_path, allow_pickle=True)
-        if list(cached["texts"]) == [c.text for c in chunks]:
-            return chunks, cached["embeddings"]
+        with np.load(cache_path, allow_pickle=False) as cached:
+            if list(cached["texts"]) == [c.text for c in chunks]:
+                return chunks, cached["embeddings"].copy()
     embeddings = np.array(llm.embed([c.text for c in chunks]))
     np.savez(cache_path, embeddings=embeddings, texts=[c.text for c in chunks])
     return chunks, embeddings
@@ -84,6 +84,15 @@ def _active_llm_option() -> str:
     return st.session_state.get("llm_option", llm.DEFAULT_LLM_OPTION)
 
 
+def _cached_chat(cache_name: str, job: Job, system: str, user: str) -> str:
+    option_key = _active_llm_option()
+    cache = st.session_state.setdefault(cache_name, {})
+    key = (job.request_id, option_key)
+    if key not in cache:
+        cache[key] = llm.chat(system=system, user=user, option_key=option_key)
+    return cache[key]
+
+
 def render_study_notes(job: Job) -> None:
     notes = pipeline.load_completed_notes(job)
     pipeline.render_markdown_with_images(notes, job.output_path)
@@ -91,14 +100,15 @@ def render_study_notes(job: Job) -> None:
 
 def render_meeting_summary(job: Job) -> None:
     notes = pipeline.load_completed_notes(job)
-    digest = llm.chat(
+    digest = _cached_chat(
+        "meeting_digests",
+        job,
         system=(
             "Extract a compact digest from these meeting notes. "
             "Use two sections: 'Decisions' and 'Action Items' (owner if named). "
             "Bullet points only, no preamble."
         ),
         user=notes,
-        option_key=_active_llm_option(),
     )
     st.subheader("Action Items / Decisions")
     st.markdown(digest)
@@ -109,14 +119,15 @@ def render_meeting_summary(job: Job) -> None:
 
 def render_triage(job: Job) -> None:
     notes = pipeline.load_completed_notes(job)
-    digest = llm.chat(
+    digest = _cached_chat(
+        "triage_digests",
+        job,
         system=(
             "You help a reviewer decide whether to watch a long video. "
             "Give a 3-5 bullet summary of what it covers, then one line: "
             "'Recommendation: watch in full / skim / skip', with a one-sentence reason."
         ),
         user=notes,
-        option_key=_active_llm_option(),
     )
     st.subheader("Triage digest")
     st.markdown(digest)

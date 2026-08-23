@@ -20,6 +20,19 @@ def slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40] or "video"
 
 
+def _safe_upload_path(job_dir: Path, filename: str) -> Path:
+    name = Path(filename.replace("\\", "/")).name
+    if not name:
+        msg = "invalid upload filename"
+        raise ValueError(msg)
+    base_dir = job_dir.resolve()
+    destination = (base_dir / name).resolve()
+    if not destination.is_relative_to(base_dir):
+        msg = "upload filename escapes job directory"
+        raise ValueError(msg)
+    return destination
+
+
 def render_auth_banner_if_needed() -> bool:
     if not st.session_state.get("auth_required"):
         return False
@@ -88,8 +101,13 @@ def render_submit_form(mode: str, video_type: VideoType, images: ImageDensity) -
         job_dir = pipeline.new_job_dir(slug)
         video_path = None
         if uploaded_file:
-            video_path = str(job_dir / uploaded_file.name)
-            Path(video_path).write_bytes(uploaded_file.getvalue())
+            try:
+                destination = _safe_upload_path(job_dir, uploaded_file.name)
+            except ValueError:
+                st.error("Invalid upload filename.")
+                return
+            destination.write_bytes(uploaded_file.getvalue())
+            video_path = str(destination)
         try:
             job = pipeline.submit_job(
                 mode=mode,
