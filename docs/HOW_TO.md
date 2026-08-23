@@ -10,10 +10,10 @@ first run, start with the [tutorial](./TUTORIAL.md).
 | Launch locally | [Start on Windows](#start-on-windows) or [Start manually](#start-manually) |
 | Sign in to Adversal | [Authenticate Adversal locally](#authenticate-adversal-locally) |
 | Configure generation | [Configure an LLM provider](#configure-an-llm-provider) |
-| Analyze a source | [Process an uploaded video](#process-an-uploaded-video) or [Process a public video URL](#process-a-public-video-url) |
+| Analyze a source | [Process an uploaded video](#process-an-uploaded-video), [focus the analysis](#process-only-part-of-a-video-or-request-exact-frames), or [process a public URL](#process-a-public-video-url) |
 | Inspect or export evidence | [Browse key frames](#browse-key-frames) or [Download agent-ready artifacts](#download-agent-ready-artifacts) |
 | Ask questions or create content | [Search the active video](#search-the-active-video) or [Create a derived document](#create-a-derived-document) |
-| Recover work or diagnose a problem | [Resume a saved job](#resume-a-saved-job) or [Recover from common failures](#recover-from-common-failures) |
+| Recover work or diagnose a problem | [Resume a saved job](#resume-a-saved-job), [retry a status check](#retry-a-status-check-without-resubmitting), or [recover from common failures](#recover-from-common-failures) |
 
 ## Start on Windows
 
@@ -152,6 +152,17 @@ the selected backend for the next answer.
 The uploaded filename is sanitized before the file is written inside its generated
 job directory.
 
+## Process only part of a video or request exact frames
+
+1. Expand **Advanced processing controls** before submitting.
+2. Enter an optional **Start time** and **End time** as seconds, `MM:SS`, or `HH:MM:SS`.
+3. Enter exact frame timestamps separated by commas or new lines when you need specific
+   screenshots.
+4. Submit normally. The chosen range and timestamps are saved with the job.
+
+Exact screenshots appear in **Key frames** with Adversal's representative images. An
+invalid range or timestamp is shown using Adversal's original validation message.
+
 ## Process a public video URL
 
 1. Select **Video URL**.
@@ -177,11 +188,11 @@ create afterward.
 
 1. Open **Key frames** in a completed workspace.
 2. Review the three-column gallery and image captions.
-3. When the analysis contains more than 12 referenced images, use **Frame page** to move
+3. When the analysis contains more than 12 images, use **Frame page** to move
    through pages.
 
-The gallery shows only Markdown references that resolve inside the job directory. If no
-safe referenced images exist, the app reports that the analysis returned no key frames.
+The gallery shows Markdown references and requested frames only when they resolve inside
+the job directory. If none exist, the app reports that the analysis returned no frames.
 
 ## Download agent-ready artifacts
 
@@ -238,6 +249,19 @@ Resuming restores the job as the active workspace. Generated documents and chat
 history do not return after a Streamlit session ends, but source files and Qdrant
 vectors remain on disk.
 
+## Retry a status check without resubmitting
+
+Use this when a saved request reaches `UNKNOWN`, the MCP transport fails, or a temporary
+status response cannot be parsed.
+
+1. Keep the failed job active, or restore it from **Resume a previous job**.
+2. Select **Retry status check**.
+3. Let the status panel query the same Adversal request ID again.
+
+This action changes the local job back to `RUNNING`; it does not upload the video or call
+`process_video` again. If Adversal reports a terminal pipeline failure again, use **Start
+over** only after deciding that a new remote submission is appropriate.
+
 ## Leave, restart, or delete a workspace
 
 - **Process another video** leaves the completed workspace and returns to submission;
@@ -267,7 +291,15 @@ prompts, transcripts, generated content, exception messages, and secret values.
 ### Adversal requests authentication
 
 Select **Authenticate** in the banner and complete the browser flow on the Streamlit
-server computer. Retry the operation if it does not resume automatically.
+server computer. Authentication succeeds only when Adversal returns `AUTHENTICATED`.
+If it returns `AUTHENTICATION FAILED`, the banner remains active and displays that
+message; start a new browser flow.
+
+### An Adversal status check fails or becomes unknown
+
+Read the error shown for the active job. Select **Retry status check** to query the same
+request without uploading the source again. Avoid **Start over** until the existing
+request is known to be unusable, because a new submission may consume quota twice.
 
 ### A provider key is missing
 
@@ -295,7 +327,8 @@ uv run streamlit run app.py
 Adversal downloads URL sources on its own infrastructure. A long, protected, or slow
 source may exceed the download window before a request ID is created. Confirm that the
 URL is publicly reachable. If it still fails, download the video through an authorized
-route and use **Upload file** instead.
+route and use **Upload file** instead. The app displays Adversal's timeout message
+directly rather than replacing it with a missing-request-ID error.
 
 ### A completed job cannot render
 

@@ -12,7 +12,8 @@ you can reuse for learning or publishing.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](./LICENSE)
 
 [Get started](#getting-started) · [Workflows](#what-you-can-create) ·
-[Architecture](#architecture) · [Documentation](#documentation)
+[Adversal guide](#powered-by-adversal-ai) · [Architecture](#architecture) ·
+[Documentation](#documentation)
 
 </div>
 
@@ -26,6 +27,195 @@ running another analysis on the video.
 > Adversal is a remote video-understanding service exposed through a local
 > `adversal-cli` MCP subprocess. Video analysis happens on Adversal's infrastructure;
 > this application stores the returned Markdown, frames, and request metadata locally.
+
+## Powered by Adversal AI
+
+> [!TIP]
+> **[Adversal AI](https://adversal.ai/) turns long videos into clean Markdown and
+> useful visual frames for AI agents.** Give it a local video or public URL, let the
+> remote job run asynchronously, then reuse the result without placing the entire raw
+> video in every model prompt. Adversal currently offers **100 free processing minutes
+> each month**. [Explore Adversal](https://adversal.ai/) ·
+> [Read the MCP guide](https://adversal.ai/documentation/mcp) ·
+> [See pricing](https://adversal.ai/pricing)
+
+Adversal is the video-understanding engine behind this application. It handles the
+multimodal source pass—speech, scenes, slides, diagrams, code, and other important
+visual context—and writes the result to a folder as structured notes plus selected
+images. Video Summarizer then adds a visual workspace, Qdrant retrieval, grounded Q&A,
+task-specific documents, and portable downloads around those artifacts.
+
+This repository is an **independent integration**. It is not an official Adversal
+product and does not imply a partnership or endorsement. Adversal owns its service,
+accounts, published pricing, quotas, benchmark claims, and MCP CLI.
+
+### What Adversal provides
+
+| Capability | What it gives you |
+| --- | --- |
+| **Local files and public URLs** | Process an authorized video from disk or a URL supported by the remote downloader |
+| **Structured Markdown** | Readable sections, summaries, timestamps, and notes instead of one unbounded transcript |
+| **Key visual frames** | Selected screenshots that preserve useful slides, diagrams, code, and scenes |
+| **Purpose-aware analysis** | `generic`, `lesson`, `interview`, and `meeting` modes shape the notes for the source |
+| **Adjustable image selection** | `minimal`, `selective`, or `generous` controls how many representative images are extracted |
+| **Clip and exact-frame controls** | Analyze a time range and optionally request frames at specific timestamps |
+| **Asynchronous jobs** | Submit once, retain the request ID, and check status without holding one long client connection open |
+| **Agent-ready interface** | Use the local MCP server from Claude Code, OpenCode, Cursor, or another stdio MCP client |
+| **Browser-based sign-in** | Authenticate through OAuth; no Adversal API key is placed in an MCP configuration file |
+| **Quota visibility** | Ask the MCP server for remaining monthly minutes and account-tier information |
+
+Adversal's MCP server exposes four tools:
+
+| Tool | Purpose |
+| --- | --- |
+| `authenticate` | Starts or refreshes the browser OAuth session |
+| `process_video` | Submits a local file or public URL and returns a `request_id` |
+| `check_video_status` | Reports `RUNNING`, `COMPLETED`, `FAILED`, or `UNKNOWN` for that request |
+| `check_remaining_quota` | Reports the remaining monthly allowance and tier details |
+
+`process_video` requires exactly one of `video_path` or `video_url`, plus an
+`output_path`. It also accepts `file_name` (default `notes.md`), `type`, `images`,
+`start_time`, `end_time`, and a `timestamps` list. Time values can be seconds, `MM:SS`,
+or `HH:MM:SS`. Explicit timestamp frames are written below
+`<output_path>/requested_frames`.
+
+### Install and connect Adversal directly
+
+You can use Adversal without this Streamlit application. Its published prerequisites
+are Python 3.13 or newer and FFmpeg/FFprobe. Install FFmpeg for your platform, then
+install the MCP server:
+
+```powershell
+# Windows
+winget install ffmpeg
+python -m pip install adversal-cli
+```
+
+```bash
+# macOS
+brew install ffmpeg
+python -m pip install adversal-cli
+
+# Debian or Ubuntu
+sudo apt install ffmpeg
+python -m pip install adversal-cli
+```
+
+`yt-dlp` is installed with `adversal-cli`. Add the server to a supported MCP client:
+
+```bash
+# Claude Code
+claude mcp add adversal -- adversal-cli
+```
+
+For OpenCode, add this to its configuration:
+
+```json
+{
+  "mcp": {
+    "adversal": {
+      "type": "local",
+      "command": ["adversal-cli"],
+      "enabled": true,
+      "timeout": 400000
+    }
+  }
+}
+```
+
+For Cursor, add this MCP server:
+
+```json
+{
+  "mcpServers": {
+    "adversal": {
+      "command": "adversal-cli",
+      "args": []
+    }
+  }
+}
+```
+
+Restart the client after changing its configuration. Ask the agent to process a video.
+If the tool reports `AUTHENTICATION REQUIRED`, call `authenticate`, complete the
+browser flow, and retry the original request without restarting the MCP server. The
+refresh session is stored at `~/.adversal/auth.txt`.
+
+A typical direct workflow is:
+
+1. Ask `check_remaining_quota` how many minutes are available.
+2. Call `process_video` with one authorized local path or public URL, an output folder,
+   the most suitable analysis type, and the desired image density.
+3. Save the returned `request_id`; do not submit the same video again while it runs.
+4. Poll `check_video_status` until it reaches `COMPLETED` or `FAILED`. Request state
+   survives MCP subprocess restarts.
+5. Open the generated Markdown and images, or give that bounded evidence to another
+   agent for searching, summarizing, or transformation.
+
+### Use Adversal through this app
+
+Video Summarizer manages that MCP lifecycle for you:
+
+1. Run this project and open the Streamlit page.
+2. Upload an authorized video or paste a supported public URL.
+3. Choose the analysis profile and visual-frame density.
+4. Optionally expand **Advanced processing controls** to select a clip or exact frames.
+5. Select **Process video** and complete Adversal authentication if prompted.
+6. Watch the saved request while the app polls every eight seconds.
+7. Inspect the source Markdown and frames, ask grounded questions, create reusable
+   documents, or download native and OKF bundles.
+
+The first five steps use Adversal. Search, Qdrant indexing, LLM-generated workflows,
+OKF export, ZIP packaging, persistence UI, and downloads are features added by this
+repository.
+
+### Why use structured video understanding
+
+- **Smaller downstream prompts:** agents can work from relevant chapters instead of
+  repeatedly consuming an entire transcript or video.
+- **Visual context survives:** screenshots keep information that speech-only
+  transcription misses.
+- **One analysis, many outputs:** the same evidence can support notes, search, meeting
+  actions, SOPs, quizzes, FAQs, blog posts, and other workflows.
+- **Long jobs are resumable:** request IDs and status checks fit agent workflows better
+  than a single connection that must remain open for the whole analysis.
+- **Model-independent artifacts:** Markdown and images are inspectable, portable, and
+  usable by different agents and language models.
+- **Low-friction trial:** the free Researcher tier needs no payment card and currently
+  includes 100 minutes per month.
+
+Common uses include lecture and course notes, meeting or webinar summaries, interview
+analysis, searchable video libraries, content triage, help-center material, SOPs with
+screenshots, and repurposing recorded material into publishable content.
+
+### Published pricing and benchmark results
+
+Adversal publishes these monthly plans as of **August 23, 2026**:
+
+| Plan | Published price | Included processing |
+| --- | ---: | ---: |
+| Researcher | Free, no card required | 100 minutes/month |
+| Lite | $10/month | 1,000 minutes/month |
+| Pro | $20/month | 2,500 minutes/month |
+| Ultra | $50/month | 6,000 minutes/month |
+| Enterprise | Custom | Custom |
+
+Its pricing page also publishes an effective comparison of **$0.008/minute** for
+Adversal, versus $0.031 for Gemini 3.1 Pro Preview, $0.040 for GPT-5.6 Sol, and $0.042
+for Claude Opus 5—described by Adversal as up to **5.3× lower cost**. These are vendor
+figures, not an independent cost study; workloads and comparison assumptions can
+change the real result.
+
+Adversal also publishes these [LongShOTBench](https://longshot.cvmbzuai.com/leaderboard)
+results: Gemma 3 27B at 41.5%, Gemini 3.1 Pro at 55.6%, and Gemma 3 27B with Adversal at
+72.1%. Treat them as vendor-reported benchmark results and review the benchmark method
+before using them for a purchasing decision.
+
+Pricing, quotas, supported clients, model comparisons, and benchmark results can
+change. Check [Adversal's current pricing](https://adversal.ai/pricing) and
+[official MCP documentation](https://adversal.ai/documentation/mcp) before deployment.
+Only process videos you are authorized to send to a remote service; review Adversal's
+current privacy and service terms for your data-handling requirements.
 
 ## Why this project exists
 
@@ -67,7 +257,9 @@ The submission form accepts one source at a time:
 | **Public URL** | Passes the URL to Adversal's remote downloader; the app does not download it itself |
 | **Analysis profile** | Generic, Lesson/tutorial, Interview, or Meeting/webinar changes how Adversal structures the source analysis |
 | **Visual-frame density** | Minimal, Selective, or Generous controls how many representative frames Adversal returns |
-| **Process-once model** | The selected profile and density apply once; all later views reuse the completed Markdown and images |
+| **Focused time range** | Optional start and end values accept seconds, `MM:SS`, or `HH:MM:SS` |
+| **Exact frames** | Optional comma- or line-separated timestamps request specific local screenshots |
+| **Process-once model** | The selected profile, density, and focused controls apply once; all later views reuse the completed Markdown and images |
 | **Non-blocking progress** | A Streamlit fragment polls Adversal every eight seconds while the rest of the application remains responsive |
 
 Uploaded filenames are reduced to a safe basename and verified to remain inside their
@@ -81,7 +273,8 @@ The completed Adversal result appears directly before any LLM summary:
 - **Notes** renders the original chaptered Markdown and its local image references.
 - **Metrics** show section count, safe referenced-frame count, and analysis profile.
 - **Key frames** presents screenshots in a three-column gallery, twelve per page, with
-  captions taken from Markdown alt text or filenames.
+  captions taken from Markdown alt text or filenames, plus safely contained exact frames
+  requested during submission.
 - **Path containment** rejects Markdown images outside the owning job directory before
   they can be displayed or archived.
 - **Missing-artifact handling** reports when Adversal marked a job complete but
@@ -169,8 +362,12 @@ Adversal uses browser OAuth, not an application API key. When an Adversal tool r
 - locally, the browser flow opens on the computer running Streamlit;
 - in a private Hugging Face Space, the app instructs the user to open the temporary URL
   printed in runtime logs; and
-- the persisted Adversal directory lets later MCP subprocesses reuse the authenticated
+- the persisted Adversal directory lets later application processes reuse the authenticated
   session.
+
+The banner clears only after Adversal returns `AUTHENTICATED`. An expired browser flow
+or `AUTHENTICATION FAILED` response remains visible as an error instead of being treated
+as a successful login.
 
 The sidebar **Quota** panel calls Adversal's `check_remaining_quota` tool and displays
 the current response without starting video processing.
@@ -178,11 +375,13 @@ the current response without starting video processing.
 ### Resumable jobs and workspace controls
 
 Each successful submission is stored in `runs/jobs.json` with its request ID, status,
-source, profile, density, output directory, and timestamps. Writes use a process-local
-lock and atomic replacement.
+source, profile, density, optional time range and frame timestamps, and output directory.
+Writes use a process-local lock and atomic replacement.
 
 - **Resume a previous job** lists the ten newest records with source, status, and request
   prefix.
+- **Retry status check** turns a failed or unknown saved job back into `RUNNING` and
+  polls its existing Adversal request ID; it never uploads or submits the video again.
 - **Process another video** leaves a completed workspace without deleting it.
 - **Start over** leaves a failed workspace while retaining its persisted record.
 - **Danger zone → Clear all runs** closes the embedded Qdrant client and permanently
@@ -219,15 +418,18 @@ and common token formats are redacted.
 
 [![Video Summarizer system architecture](./docs/diagrams/system-architecture.svg)](./docs/diagrams/video-summarizer-architecture.html)
 
-The Streamlit app launches a fresh `adversal-cli` MCP subprocess for each submission,
-status, quota, or authentication call. Adversal's local registry keeps the remote request
-state, so a new subprocess can poll an earlier `request_id`. Completed artifacts feed
-four workspace views:
+The Streamlit process lazily opens one `adversal-cli` MCP subprocess. A daemon worker
+thread owns its asynchronous MCP context, while a thread-safe queue serializes
+submission, status, quota, and authentication calls onto that session. This keeps
+Adversal's background extraction task alive across Streamlit reruns. Transport failures
+discard the broken session so the next action can create a fresh one; they do not
+automatically resubmit a video. After a real application restart, Adversal's local
+registry recovers earlier request IDs. Completed artifacts feed four workspace views:
 
 | View | Responsibility |
 | --- | --- |
 | **Notes** | Inspect source Markdown and download Markdown, native, or OKF bundles |
-| **Key frames** | Browse only safe, locally referenced images |
+| **Key frames** | Browse safe, locally referenced and explicitly requested images |
 | **Ask** | Index, retrieve, answer, and expose supporting chapters |
 | **Create** | Generate one of seven cached Markdown documents |
 
@@ -315,9 +517,10 @@ Configured model choices:
 1. Select **Upload file** or **Public URL**.
 2. Choose the video type: Generic, Lesson/tutorial, Interview, or Meeting/webinar.
 3. Choose Minimal, Selective, or Generous key-frame extraction.
-4. Select **Process video** and let the status panel poll Adversal.
-5. Review **Notes** and **Key frames** before relying on generated material.
-6. Use **Ask** for grounded questions or **Create** for a reusable document.
+4. Optionally set a clip range or exact frame timestamps under advanced controls.
+5. Select **Process video** and let the status panel poll Adversal.
+6. Review **Notes** and **Key frames** before relying on generated material.
+7. Use **Ask** for grounded questions or **Create** for a reusable document.
 
 The sidebar can check Adversal quota, resume one of the ten newest persisted jobs, switch
 the generation backend, or permanently clear all run data.
@@ -402,10 +605,11 @@ uv run ty check
 uv run pytest -q
 ```
 
-The current suite covers filesystem containment, export safety, provider contracts,
-cache behavior, long-note reduction, Qdrant filtering and idempotency, concurrent job
-persistence, and logging redaction/rotation. External Adversal and model services are
-not called during tests.
+The current suite covers Adversal response contracts and connection reuse, focused-job
+compatibility, filesystem containment, export safety, provider contracts, cache behavior,
+long-note reduction, Qdrant filtering and idempotency, concurrent job persistence, and
+logging redaction/rotation. It currently contains 31 focused tests. External Adversal and
+model services are not called during tests.
 
 For module ownership and safe change paths, read the
 [developer/operator technical guide](./docs/TECHNICAL_GUIDE.md).
@@ -416,6 +620,8 @@ For module ownership and safe change paths, read the
 - Generated documents and chat history stay in the session and are not persisted.
 - Embedded Qdrant and `jobs.json` locking support one server process only.
 - Public video URLs do not have an application-level host or private-network policy.
+- Adversal and model calls have no automatic retry, timeout, or circuit breaker; failed
+  Adversal jobs can manually retry the existing status request.
 - There is no automatic provider fallback, retention cleanup, or application-level
   encryption.
 - Model output and retrieval similarity require human verification for consequential

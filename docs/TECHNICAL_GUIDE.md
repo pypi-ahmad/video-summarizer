@@ -36,7 +36,7 @@ Detailed views:
 | --- | --- | --- |
 | Presentation | `app.py` | Streamlit widgets, session routing, upload/URL submission, authentication UI, workspace selection |
 | Workflow | `pipeline.py` | Job model, directory allocation, JSON persistence, polling, result loading |
-| Video integration | `adversal_client.py` | Short-lived MCP stdio sessions with `adversal-cli` |
+| Video integration | `adversal_client.py` | Persistent serialized MCP stdio session with `adversal-cli` |
 | Artifact handling | `artifacts.py` | Safe image discovery, native ZIP, OKF 0.2 ZIP |
 | Feature workflows | `modes.py` | Retrieval UI, prompts, long-note reduction, seven generated documents |
 | Vector storage | `vector_store.py` | Embedded Qdrant collection, indexing, request-filtered search |
@@ -56,7 +56,7 @@ The modules are flat and organized by layer. Keep provider SDK construction insi
 | `auth_required` is true | Authentication banner; normal page rendering stops | Successful OAuth clears the flag and reruns |
 | No active job | Video source and analysis form | Successful submission stores the new active job |
 | Active job is `RUNNING` | Polling status panel | Terminal Adversal status is persisted and rerun |
-| Active job is `FAILED` | Error and **Start over** | Clears only the active session pointer |
+| Active job is `FAILED` | Error, **Retry status check**, and **Start over** | Retry reuses the request ID; Start over clears only the active pointer |
 | Active job is `COMPLETED` | Notes, Key frames, Ask, and Create workspace | **Process another video** clears only the active pointer |
 
 The sidebar is rendered for every normal page state. It selects the chat backend, checks
@@ -68,14 +68,14 @@ control.
 1. `app.py` accepts exactly one uploaded video or public URL and creates a UUID-bearing
    directory under `runs/`.
 2. `pipeline.submit_job()` calls `adversal_client.process_video()` with the selected
-   video type and frame density.
-3. `adversal-cli` runs as a fresh MCP stdio subprocess for that call and returns a
-   `request_id` for the remote Adversal job.
+   video type, frame density, and optional focused-processing values.
+3. The process-wide MCP client lazily starts `adversal-cli`, keeps that session alive
+   across Streamlit reruns, and returns a parsed `request_id`.
 4. The application persists a `RUNNING` job in `runs/jobs.json`.
-5. A Streamlit fragment calls `check_video_status` every eight seconds. Each poll uses a
-   new MCP subprocess; Adversal's local registry retains request state across calls.
+5. A Streamlit fragment calls `check_video_status` every eight seconds through the same
+   serialized MCP session. A real application restart uses Adversal's persisted registry.
 6. `COMPLETED` persists the completion time and exposes the workspace. `FAILED` persists
-   the error. `UNKNOWN` continues polling.
+   the error. `UNKNOWN` becomes a recoverable failed state instead of polling forever.
 
 Authentication follows a separate branch. An MCP response containing
 `AUTHENTICATION REQUIRED` becomes `AdversalAuthRequiredError`; the app presents an
@@ -103,6 +103,9 @@ temporary URL printed in runtime logs, and the resulting Adversal state persists
 | `source_url` | string or null | Original URL for URL submissions |
 | `video_type` | string | `generic`, `lesson`, `interview`, or `meeting` |
 | `image_density` | string | `minimal`, `selective`, or `generous` |
+| `start_time` | string or null | Optional focused clip start |
+| `end_time` | string or null | Optional focused clip end |
+| `timestamps` | list of strings | Optional exact-frame timestamps |
 | `completed_at` | number or null | Unix completion timestamp |
 
 Job updates use a process-local lock and atomic temporary-file replacement. This
@@ -120,7 +123,8 @@ runs/
 └── <timestamp>_<uuid>_<slug>/
     ├── <uploaded-video>       # upload submissions only
     ├── notes.md
-    └── <referenced frames>
+    ├── <referenced frames>
+    └── requested_frames/      # exact timestamp frames, when requested
 ```
 
 Streamlit session state holds the active job, generated-document caches, Ask chat
@@ -146,9 +150,29 @@ The private Docker deployment maps persistent bucket paths as follows:
 | `check_remaining_quota()` | `check_remaining_quota` | Return account quota information |
 | `authenticate()` | `authenticate` | Complete browser-based OAuth |
 
-Every wrapper starts `adversal-cli`, initializes one MCP client session, performs one
-tool call, and exits. Tool errors become `AdversalError`; authentication requirements
-use the dedicated `AdversalAuthRequiredError` type.
+The first wrapper call lazily starts `adversal-cli`; later calls reuse the same serialized
+MCP session until the application exits or the transport fails. Each tool response is
+validated against its success contract. Tool errors become `AdversalError`, while
+authentication requirements use the dedicated `AdversalAuthRequiredError` type.
+
+`_MCPConnection` owns one daemon worker thread. A single coroutine on that thread enters
+and exits the MCP stdio and client-session contexts, while synchronous Streamlit callers
+submit `_ToolCall` records through a thread-safe queue and wait on futures. This avoids
+cross-task AnyIO cancellation-scope errors and keeps Adversal's background extraction
+task alive between Streamlit reruns. Calls remain serialized by the adapter lock.
+
+The adapter validates these response contracts before returning data upstream:
+
+| Tool | Required successful response |
+| --- | --- |
+| `process_video` | Contains a parseable `request_id`; otherwise the original Adversal message becomes `AdversalError` |
+| `check_video_status` | Begins with `COMPLETED`, `FAILED`, `RUNNING`, or `UNKNOWN` |
+| `check_remaining_quota` | Begins with `QUOTA STATUS` |
+| `authenticate` | Begins with `AUTHENTICATED`; `AUTHENTICATION FAILED` remains an error |
+
+A transport exception closes and discards the connection. The next user action creates
+a new session. The adapter never automatically retries `process_video`, so an uncertain
+submission cannot silently create a duplicate remote job.
 
 ## Artifacts and exports
 
@@ -299,10 +323,11 @@ uv run ty check
 uv run pytest -q
 ```
 
-The tests cover upload and image path containment, bundle safety, provider contracts,
-cache keys, long-note reduction, Qdrant filtering/idempotency, concurrent persistence,
-and logging behavior. External Adversal and model services are not called by the test
-suite.
+The tests cover Adversal response parsing and connection reuse, focused-job backward
+compatibility, requested-frame containment, upload and Markdown image containment,
+bundle safety, provider contracts, cache keys, long-note reduction, Qdrant
+filtering/idempotency, concurrent persistence, and logging behavior. External Adversal
+and model services are not called by the test suite.
 
 CI runs the same dependency sync, Ruff, ty, and pytest checks on Windows for pushes and
 pull requests targeting `main`.
@@ -327,6 +352,8 @@ read-only synchronization check and should pass before committing documentation 
 - Every Qdrant query must include the active `request_id` payload filter.
 - Embedding-model changes require a new compatible collection identity.
 - Paid generated documents must remain cached by request ID and selected backend.
+- MCP async contexts must be entered and exited by the same worker coroutine.
+- `process_video` must never be retried automatically after an uncertain transport error.
 - Streamlit reruns must not add duplicate logging handlers.
 - Clearing runs must close the embedded Qdrant client before removing `runs/`.
 
@@ -352,6 +379,8 @@ public option, default, environment variable, storage path, or runtime behavior 
 | --- | --- | --- |
 | `adversal-cli not found` | `uv sync --locked --all-groups` completed | Confirm `.venv` and launcher environment |
 | Authentication banner repeats | Runtime logs and persisted Adversal directory | Complete the newest OAuth URL; restart once |
+| Authentication reports failure | Adversal message in the banner | Start a new browser flow; do not clear the auth state manually |
+| Status becomes unknown or transport fails | Existing request ID and failed-job message | Select **Retry status check**; do not resubmit first |
 | URL processing times out | Source is public and short enough for remote download | Upload an authorized local file instead |
 | Ask cannot start | `OPENAI_API_KEY` exists in the running process | Restart after setting the variable |
 | Saved job cannot render | Job directory and `notes.md` still exist | Restore files or remove the stale job record manually |

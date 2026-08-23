@@ -7,7 +7,8 @@ what you need:
   completing one guided example.
 - [How-to guides](./HOW_TO.md): start the app, configure providers, process sources,
   search, export individual artifacts or Download All, resume work, troubleshoot, and
-  delete local data.
+  delete local data. It also covers focused clip ranges, exact frame timestamps, and
+  retrying an existing Adversal request without resubmission.
 - [Reference](./REFERENCE.md): look up supported inputs, exact options, models,
   environment variables, download-filename and archive contracts, storage, and commands.
 - [Explanation](./EXPLANATION.md): understand the process-once architecture, Adversal

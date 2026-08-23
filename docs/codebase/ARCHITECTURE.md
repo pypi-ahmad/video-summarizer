@@ -6,7 +6,7 @@
 
 - Style: a small layered Streamlit application with adapters around external services.
 - Structure: UI orchestration (`app.py`) calls workflow and persistence (`pipeline.py`), artifact and export logic (`artifacts.py`), feature renderers (`modes.py`), Qdrant storage (`vector_store.py`), and integration adapters.
-- Constraints: one trusted user and one process; Streamlit reruns; multi-minute asynchronous Adversal jobs; file-backed resume support; a fresh MCP subprocess per tool call; and an optional private Docker deployment with a persistent `/data` mount.
+- Constraints: one trusted user and one process; Streamlit reruns; multi-minute asynchronous Adversal jobs; file-backed resume support; one serialized process-wide MCP session; and an optional private Docker deployment with a persistent `/data` mount.
 
 ### 2) System Flow
 
@@ -18,13 +18,18 @@ Streamlit widget -> local upload or public URL -> adversal-cli over MCP stdio
 
 1. `app.py:main()` initializes one active workspace job, selects the chat backend, and dispatches current state.
 2. `app.py:render_submit_form()` stores an upload under `runs/<job>/` or passes a URL, then calls `pipeline.submit_job()`.
-3. `pipeline.submit_job()` calls `adversal_client.process_video()`, extracts a request ID, creates a `Job`, and persists it in `runs/jobs.json`.
-4. `pipeline.render_job_progress()` polls `check_video_status()` every 8 seconds through `st.fragment`; terminal status is persisted and triggers rerender.
+3. `pipeline.submit_job()` calls `adversal_client.process_video()` through the process-wide worker queue, receives a parsed request ID, creates a `Job`, and persists it in `runs/jobs.json`.
+4. `pipeline.render_job_progress()` polls `check_video_status()` every 8 seconds through `st.fragment` and the same MCP session; terminal or unknown status is persisted and triggers rerender.
 5. Completed jobs expose Notes, Key frames, Ask, and Create. `modes.CREATE_RENDERERS` selects one of seven generated outputs, and the workspace header packages core and already-cached outputs through Download All.
 6. Ask embeds chapter-aware chunks with OpenAI and stores/searches them in local Qdrant with a request-ID filter.
 7. `llm.chat()` dispatches grounded prompts to OpenAI, Agnes through the OpenAI-compatible client, or Gemini.
 
-Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED` becomes `AdversalAuthRequiredError`; `app.py` sets session state, shows an authentication banner, invokes browser OAuth, then reruns.
+Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED` becomes `AdversalAuthRequiredError`; `app.py` sets session state, shows an authentication banner, invokes browser OAuth, and clears the banner only after an `AUTHENTICATED` response. An `AUTHENTICATION FAILED` response remains visible as an error.
+
+Failure branch: malformed success responses and ordinary-text backend failures become
+`AdversalError` with the original message. `UNKNOWN` becomes a persisted failed job;
+**Retry status check** resumes polling the same request ID and never submits the video
+again.
 
 ### 3) Layer/Module Responsibilities
 
@@ -50,6 +55,7 @@ Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED`
 | Streamlit session cache | Generated documents, index-ready markers and chats in `modes.py` | Preserves generated state across reruns for one browser session |
 | Persistent vector store | `runs/qdrant/` through `vector_store.py` | Reuses embeddings across sessions and filters retrieval by active request |
 | File-backed registry | `runs/jobs.json` | Resumes Adversal jobs after app restart |
+| Worker-owned async session | `adversal_client._MCPConnection` | Keeps MCP context entry, calls, and exit on one coroutine while Streamlit calls a synchronous API |
 | Deferred export composition | `app.render_workspace()`, `artifacts.build_all_downloads_bundle()` | Builds the aggregate ZIP only when clicked and makes no provider call |
 
 ### 5) Known Architectural Risks

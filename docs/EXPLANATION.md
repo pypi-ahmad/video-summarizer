@@ -17,14 +17,14 @@ all derived outputs tied to one source artifact.
 
 ## Why Adversal sits behind MCP
 
-The application does not call an Adversal REST endpoint. It launches `adversal-cli` as
-a local MCP server over standard input/output, opens one client session, calls one tool,
-and closes the subprocess.
+The application does not call an Adversal REST endpoint. It lazily launches
+`adversal-cli` as a local MCP server over standard input/output and keeps one serialized
+client session for the application process.
 
-This short-lived adapter fits Streamlit's rerun model. Submission, status checks, quota
-checks, and authentication can each run independently. Adversal's own local registry
-preserves request IDs between subprocesses, while this app keeps the UI-facing job
-record in `runs/jobs.json`.
+The persistent adapter fits Streamlit's rerun model while preserving Adversal's own
+background extraction task. Submission, status, quota, and authentication reuse that
+session. After a real application restart, Adversal's local registry recovers request
+IDs while this app keeps the UI-facing job record in `runs/jobs.json`.
 
 The boundary also keeps Adversal-specific tool names and response parsing out of the
 workspace and document generators. Its cost is that response wording and browser-based

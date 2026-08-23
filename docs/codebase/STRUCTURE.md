@@ -7,7 +7,7 @@
 | Path | Purpose | Evidence |
 |------|---------|----------|
 | `app.py` | Streamlit entry point, source submission and process-once workspace routing | `main()`, `render_submit_form()`, `render_workspace()` |
-| `adversal_client.py` | Stateless MCP stdio adapter around `adversal-cli` | `_call_tool()`, public wrapper functions |
+| `adversal_client.py` | Process-wide MCP stdio adapter with one worker thread, serialized request queue, and reusable `adversal-cli` session | `_MCPConnection`, `_call_tool()`, public wrapper functions |
 | `pipeline.py` | Job model, JSON persistence, polling, result loading and image-aware Markdown rendering | `Job`, `_save_job()`, `render_job_progress()` |
 | `artifacts.py` | Safe frame discovery, portable filenames, native/OKF exports, and Download All packaging | `download_filename()`, `build_all_downloads_bundle()` |
 | `modes.py` | Qdrant chunking/chat, seven generated outputs, and active-backend cache discovery | `CREATE_RENDERERS`, `cached_generated_documents()` |
@@ -28,7 +28,7 @@
 ### 2) Entry Points
 
 - Main runtime entry: `app.py:main()`.
-- Secondary entry points: canonical `launch.cmd` bootstraps `.venv` and starts `.venv\Scripts\python.exe -m streamlit run app.py`; legacy `launch.bat` performs a less strict uv setup; `adversal-cli` is spawned as an integration subprocess, not an application entry point.
+- Secondary entry points: canonical `launch.cmd` bootstraps `.venv` and starts `.venv\Scripts\python.exe -m streamlit run app.py`; legacy `launch.bat` performs a less strict uv setup. The adapter lazily starts one `adversal-cli` integration subprocess and keeps it for the application-process lifetime.
 - Entry selection: Streamlit executes `app.py`; its `if __name__ == "__main__"` guard calls `main()`.
 
 ### 3) Module Boundaries
@@ -36,7 +36,7 @@
 | Boundary | What belongs here | What must not be here |
 |----------|-------------------|------------------------|
 | `app.py` | Page composition, widgets, session routing | Provider SDK calls or MCP transport details |
-| `adversal_client.py` | Adversal tool arguments, MCP lifecycle, integration error translation | Streamlit UI or mode-specific presentation |
+| `adversal_client.py` | Adversal tool arguments, worker-thread/queue ownership, MCP lifecycle, response contracts, and integration error translation | Streamlit UI or mode-specific presentation |
 | `pipeline.py` | Shared job lifecycle and local result files | Provider-specific LLM prompts |
 | `artifacts.py` | Adversal artifact parsing and portable exports | UI routing or remote service calls |
 | `modes.py` | Generated-output prompts, chunking, RAG chat and presentation | MCP session construction or Qdrant lifecycle details |

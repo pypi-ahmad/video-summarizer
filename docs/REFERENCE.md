@@ -108,6 +108,17 @@ Default: `Generic`.
 
 Default: `Selective`.
 
+### Focused processing
+
+| UI field | Accepted values | Default |
+| --- | --- | --- |
+| Start time | Seconds, `MM:SS`, or `HH:MM:SS` | Empty |
+| End time | Seconds, `MM:SS`, or `HH:MM:SS` | Empty |
+| Exact frame timestamps | Comma- or line-separated values in the same formats | Empty |
+
+Exact frames are written beneath `<job>/requested_frames` and appear in the Key frames
+view when their resolved paths remain inside the job directory.
+
 ## Job states
 
 | State | Meaning |
@@ -116,8 +127,9 @@ Default: `Selective`.
 | `COMPLETED` | Adversal reported completion; workspace views read `notes.md` and images |
 | `FAILED` | Adversal or polling failed; the stored job includes an error when available |
 
-Unknown Adversal status text remains in the polling state. A completed job records
-`completed_at`. Selecting **Start over** after failure clears the active session pointer
+`UNKNOWN` and unrecognized responses become `FAILED` with the original Adversal message.
+**Retry status check** resumes polling the same request ID without resubmitting the video.
+A completed job records `completed_at`. **Start over** clears the active session pointer
 but does not remove the persisted job or files.
 
 ## Workspace controls
@@ -125,7 +137,7 @@ but does not remove the persisted job or files.
 | View | Behavior |
 | --- | --- |
 | Notes | Source Markdown, metrics, rendered referenced images, and three downloads |
-| Key frames | Referenced safe local images, 12 per page in three columns |
+| Key frames | Referenced and explicitly requested safe local images, 12 per page in three columns |
 | Ask | Active-video Qdrant retrieval, chat answer, sources, and full notes |
 | Create | One of seven generated Markdown documents |
 
@@ -194,7 +206,8 @@ runs/
 └── <timestamp>_<uuid>_<video-slug>/
     ├── <uploaded-video>       # uploads only
     ├── notes.md
-    └── <Adversal images>
+    ├── <Adversal images>
+    └── requested_frames/      # only when exact timestamps were requested
 ```
 
 `jobs.json` is updated through a process-local lock and atomic temporary-file

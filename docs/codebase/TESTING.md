@@ -25,7 +25,7 @@ uv run ty check
 
 | Scope | Covered? | Typical target | Notes |
 |-------|----------|----------------|-------|
-| Unit | Partial | Upload paths, Markdown images, provider contracts, output registry, reduction, Qdrant filtering, export naming/bundles, LLM caching, logging | Twenty-four focused regressions exist |
+| Unit | Partial | Upload paths, Markdown images, Adversal contracts/lifecycle, provider contracts, output registry, reduction, Qdrant filtering, export naming/bundles, LLM caching, logging | Thirty-one focused regressions exist |
 | Integration | Partial | Concurrent JSON persistence and directory allocation | Uses temporary local files; external services remain mocked/uncovered |
 | E2E | No | Upload/URL through completion and mode rendering | No automated live-service flow exists |
 

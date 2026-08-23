@@ -70,14 +70,18 @@ address shown in the terminal, normally `http://localhost:8501`.
 3. Choose an `.mp4`, `.mov`, `.mkv`, or `.webm` video that you are authorized to
    process.
 4. Keep **Generic** as the video type and **Selective** as the key-frame density.
-5. Select **Process video**.
+5. Leave **Advanced processing controls** empty for this first full-video run.
+6. Select **Process video**.
 
 If Adversal requests authentication, select **Authenticate** and complete the browser
 flow on the same computer that runs Streamlit. The app resumes after the sign-in flow.
 
-The status panel checks Adversal every eight seconds. You can close the browser and
-resume the saved request later from the sidebar because its job record is stored in
-`runs/jobs.json`.
+The status panel checks Adversal every eight seconds through one persistent local MCP
+session. You can close the browser and resume the saved request later from the sidebar
+because its job record is stored in `runs/jobs.json`.
+
+If authentication fails, the banner remains visible and shows Adversal's message. Start
+the browser flow again; the app does not treat a failed sign-in as success.
 
 **Checkpoint:** while analysis is active, the page shows `RUNNING` and a last-checked
 time. When it finishes, the workspace opens on **Notes** and shows the Adversal request

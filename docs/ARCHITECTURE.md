@@ -9,7 +9,8 @@ Architecture material is organized by reader intent:
 - [Reference](./REFERENCE.md) records exact runtime contracts, model settings, Qdrant
   behavior, storage paths, commands, and limits.
 - [Codebase architecture](./codebase/ARCHITECTURE.md) maps the implementation layers,
-  module responsibilities, patterns, and maintenance risks.
+  module responsibilities, persistent MCP worker/session, failure recovery, patterns,
+  and maintenance risks.
 - [Technical guide](./TECHNICAL_GUIDE.md) provides the developer/operator view of
   runtime contracts, export composition, persistence, integrations, security,
   deployment, and change paths.
@@ -24,7 +25,7 @@ For a guided, searchable view of this documentation set, open the
 
 Focused diagrams:
 
-- [System architecture](./diagrams/system-architecture.svg) ([Mermaid source](./diagrams/system-architecture.mmd))
-- [Video-processing sequence](./diagrams/video-processing-sequence.svg) ([Mermaid source](./diagrams/video-processing-sequence.mmd))
-- [Job lifecycle](./diagrams/job-lifecycle.svg) ([Mermaid source](./diagrams/job-lifecycle.mmd))
+- [System architecture](./diagrams/system-architecture.svg) shows the complete process-once and reuse path ([Mermaid source](./diagrams/system-architecture.mmd)).
+- [Video-processing sequence](./diagrams/video-processing-sequence.svg) traces submission, persistent-session polling, and authentication ([Mermaid source](./diagrams/video-processing-sequence.mmd)).
+- [Job lifecycle](./diagrams/job-lifecycle.svg) shows terminal states and retrying the same request ID ([Mermaid source](./diagrams/job-lifecycle.mmd)).
 - [Private Hugging Face deployment](./diagrams/private-space-deployment.html)

@@ -28,7 +28,7 @@
 
 | Concern | Evidence | Current symptom | Scaling risk | Suggested improvement |
 |---------|----------|-----------------|-------------|-----------------------|
-| Fresh MCP subprocess for every 8-second poll | `adversal_client._call_tool()`, `pipeline.render_job_progress()` | Process startup per poll | CPU/process overhead across sessions | Keep current simple design for local use; measure before changing |
+| Serialized process-wide MCP session | `adversal_client._MCPConnection`, `_call_tool()` | One worker thread and queue run one tool call at a time | A long tool or recovery call delays quota, authentication, and status actions behind it | Retain the single-user boundary; add bounded call timeouts or separate connection ownership only if measured latency requires it |
 | Full JSON registry rewrite per status change | `pipeline.py` | O(number of jobs) write | Slower as history grows | Use a database only when measured scale requires it |
 | Embedded Qdrant local mode | `vector_store.py` | Serialized in-process access | Not suitable for multiple app processes or large shared corpora | Move the same client API to Qdrant Server or Cloud when deployment scope changes |
 
@@ -41,7 +41,7 @@ so churn counts are too volatile to distinguish stable from fragile areas reliab
 |------|-------------|-------------|----------------------|
 | `app.py` + `pipeline.py` | Upload, persistence, polling and filesystem boundaries cross modules | Low-confidence short history | Keep focused path/persistence regressions passing |
 | `modes.py` | Seven renderers plus reduction, chunking, and RAG chat | Broad feature responsibility | Test pure generation/chunk functions and rerun behavior separately |
-| `adversal_client.py` | Async MCP task-group behavior has deliberate exception placement | Integration boundary with limited live-test coverage | Preserve outside-context exception translation; mock MCP responses |
+| `adversal_client.py` | One daemon thread owns the async MCP context while synchronous callers wait on queued futures | Integration boundary with limited live-test coverage | Preserve same-coroutine context ownership, serialized calls, reset-on-transport-failure behavior, and mocked response-contract tests |
 
 ### 6) Confirmed Product Boundary
 
