@@ -13,9 +13,13 @@
 | `modes.py` | Qdrant chunking/chat and seven LLM-generated outputs | `CREATE_RENDERERS`, `render_knowledge_base()` |
 | `vector_store.py` | Persistent local Qdrant indexing and request-filtered search | `index_video()`, `search_video()` |
 | `llm.py` | OpenAI-compatible and Gemini provider dispatch; OpenAI embeddings | `LLM_OPTIONS`, `chat()`, `embed()` |
+| `observability.py` | Central terminal and rotating-file logging with secret redaction | `configure_logging()`, `log_failure()` |
+| `Dockerfile` | Hugging Face-compatible Python 3.13/uv/FFmpeg image | image stages and runtime command |
+| `container-entrypoint.sh` | Maps persistent `/data` storage into application and Adversal paths | startup symlinks |
+| `.dockerignore` | Excludes secrets, runtime data, development files, and docs from the image build context | ignore patterns |
 | `launch.cmd` | Self-contained Windows uv/Python/venv bootstrap and Streamlit launch | batch commands |
 | `launch.bat` | Legacy compatibility launcher without the pinned/locked guarantees of `launch.cmd` | batch commands |
-| `tests/` | Focused security, caching, and persistence regressions | `tests/test_regressions.py` |
+| `tests/` | Focused security, caching, persistence, and observability regressions | `tests/test_regressions.py`, `tests/test_observability.py` |
 | `docs/` | User guide, technical architecture, and codebase onboarding material | `docs/USAGE.md`, `docs/ARCHITECTURE.md` |
 | `runs/` | Gitignored runtime jobs, notes, images, index and `jobs.json` | `pipeline.RUNS_DIR`, `.gitignore` |
 | `docs/codebase/` | Generated codebase onboarding documents | this documentation set |
@@ -37,6 +41,7 @@
 | `modes.py` | Generated-output prompts, chunking, RAG chat and presentation | MCP session construction or Qdrant lifecycle details |
 | `vector_store.py` | Qdrant collection, point payload and filtering policy | Streamlit presentation or MCP transport |
 | `llm.py` | LLM clients, model selection and embeddings | Streamlit state or job persistence |
+| `observability.py` | Logging configuration, sanitization, and failure metadata | User content or business workflows |
 
 These are observed boundaries, not enforced package rules.
 
@@ -56,5 +61,8 @@ These are observed boundaries, not enforced package rules.
 - `modes.py`
 - `adversal_client.py`
 - `llm.py`
+- `observability.py`
+- `Dockerfile`
+- `container-entrypoint.sh`
 - `.gitignore`
 - `tests/test_regressions.py`

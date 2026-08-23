@@ -1,0 +1,34 @@
+sequenceDiagram
+    autonumber
+    actor User
+    participant App as Streamlit app
+    participant Pipeline
+    participant MCP as adversal-cli
+    participant Backend as Adversal backend
+
+    User->>App: Upload video or submit URL
+    App->>Pipeline: submit_job(options)
+    Pipeline->>MCP: process_video(...)
+    MCP->>Backend: Start remote analysis
+    Backend-->>MCP: request_id
+    MCP-->>Pipeline: request_id
+    Pipeline-->>App: Persist RUNNING job
+
+    loop Every 8 seconds
+        App->>Pipeline: render_job_progress()
+        Pipeline->>MCP: check_video_status(request_id)
+        MCP->>Backend: Read status
+        Backend-->>Pipeline: RUNNING / COMPLETED / FAILED
+    end
+
+    alt Authentication required
+        Pipeline-->>App: Set auth_required
+        User->>App: Authenticate
+        App->>MCP: authenticate()
+    else Completed
+        Pipeline-->>App: Persist COMPLETED + artifacts
+        App-->>User: Notes, frames, Ask, Create
+    else Failed
+        Pipeline-->>App: Persist FAILED + error
+        App-->>User: Failure and start-over controls
+    end

@@ -25,6 +25,9 @@ Versions below are the resolved versions reported by `uv tree --depth 1` on 2026
 | Qdrant Client | 1.19.0 | Persistent local vector storage and cosine retrieval | `vector_store.py` |
 | python-dotenv | 1.2.3 | Optional local `.env` loading | `llm.py`, `.env.example` |
 
+The hosted image uses `python:3.13-slim-trixie`, uv 0.12.5, and system FFmpeg. It runs
+as UID 1000 and exposes Streamlit on port 7860 through the container command.
+
 ### 3) Development Toolchain
 
 | Tool | Purpose | Evidence |
@@ -48,11 +51,12 @@ Windows bootstrap and launch: `launch.cmd`.
 
 ### 5) Environment and Config
 
-- Config sources: `pyproject.toml`, `.python-version`, `.env.example`, environment variables.
+- Config sources: `pyproject.toml`, `.python-version`, `.env.example`, environment variables, `Dockerfile`, and `container-entrypoint.sh`.
 - Required env vars depend on selected functionality: `OPENAI_API_KEY`, `AGNES_API_KEY`, `GOOGLE_API_KEY`; `OPENAI_BASE_URL` is optional.
 - `OPENAI_API_KEY` is also required for knowledge-base embeddings regardless of selected chat backend.
 - Runtime constraints: `uv`, Python 3.13+, `adversal-cli`, and `ffmpeg`/`ffprobe` on `PATH`; OAuth opens a browser on the server machine.
-- No container configuration exists. `.github/workflows/ci.yml` defines a Windows quality gate.
+- `VIDEO_SUMMARIZER_LOG_LEVEL` optionally selects `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`; default `INFO`.
+- Docker deployment maps persistent `/data` subdirectories to runs, Adversal state, and logs. `.github/workflows/ci.yml` defines a Windows quality gate.
 
 ### 6) Evidence
 
@@ -63,3 +67,5 @@ Windows bootstrap and launch: `launch.cmd`.
 - `launch.cmd`
 - `llm.py`
 - `.github/workflows/ci.yml`
+- `Dockerfile`
+- `container-entrypoint.sh`

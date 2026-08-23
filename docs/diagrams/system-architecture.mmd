@@ -1,0 +1,16 @@
+flowchart LR
+    user["User browser"] --> app["Streamlit app"]
+    app --> mcp["adversal-cli<br/>MCP stdio"]
+    mcp --> adversal["Adversal backend"]
+    adversal --> files[("Markdown + key frames")]
+    files --> workspace["Reusable workspace"]
+    workspace --> qdrant[("Qdrant vectors")]
+    workspace --> providers["OpenAI / Agnes / Gemini"]
+    workspace --> outputs["Notes · Search · 7 documents"]
+
+    classDef focal fill:#fff0e9,stroke:#eb6c36,color:#2d3142,stroke-width:2px
+    classDef store fill:#eef0f4,stroke:#4f5d75,color:#2d3142
+    classDef external fill:#f8f8f8,stroke:#7a8399,color:#2d3142,stroke-dasharray:4 3
+    class app,workspace focal
+    class files,qdrant store
+    class adversal,providers external

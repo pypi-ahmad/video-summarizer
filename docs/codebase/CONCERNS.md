@@ -6,7 +6,7 @@
 
 | Severity | Concern | Evidence | Impact | Suggested action |
 |----------|---------|----------|--------|------------------|
-| Medium | User-controlled public URL reaches downloader | `app.py`, `adversal_client.py` | A remote deployment could expose server-side network access | Keep local-only boundary or add URL/network policy before remote deployment |
+| Medium | User-controlled public URL reaches downloader | `app.py`, `adversal_client.py` | The private hosted runtime could expose server-side network access | Add URL/network policy before enabling URL ingestion for untrusted users |
 | Medium | Raw integration errors are displayed | `app.py` | Provider/tool details may reach UI | Add an error-redaction contract before shared deployment |
 | Medium | Local Qdrant is single-process | `vector_store.py` | A second Streamlit process cannot safely share the embedded storage directory | Use Qdrant Server or Cloud before multi-process deployment |
 
@@ -15,13 +15,13 @@
 | Debt item | Why it exists | Where | Risk if ignored | Suggested fix |
 |-----------|---------------|-------|-----------------|---------------|
 | Partial exception handling | Adversal errors handled; file/LLM/Qdrant errors mostly left to Streamlit | `app.py`, `modes.py`, `vector_store.py` | Raw failure pages and poor recovery | Catch errors at owning UI boundary with provider/job context |
-| Runtime storage has manual cleanup only | README documents local single-user scope | `runs/`, `app.py:78-84` | Disk growth | Retain manual cleanup while local-only; add policy only if observed need appears |
+| Runtime storage has manual cleanup only | Local and private-hosted workflows retain completed artifacts | `runs/`, `/data/runs`, `app.py` | Disk or bucket growth | Keep manual cleanup for one trusted user; define retention before broader use |
 
 ### 3) Security Concerns
 
 | Risk | OWASP category | Evidence | Current mitigation | Gap |
 |------|----------------|----------|--------------------|-----|
-| User-controlled public URL reaches downloader | A10 SSRF | `app.py:94,112-119`, `adversal_client.py:57-84`, `uv.lock` | README limits app to local single-user use | No scheme/host/network validation in this layer; downstream behavior is unverified |
+| User-controlled public URL reaches downloader | A10 SSRF | `app.py`, `adversal_client.py`, `uv.lock` | Supported deployment is private and single-user | No scheme/host/network validation in this layer; downstream behavior is unverified |
 | Raw integration errors shown in UI | A09 Security Logging and Monitoring Failures / information exposure | `app.py:42-45,55-61,120-124,130-134` | Keys are not logged by application code | Error-redaction contract is absent |
 
 ### 4) Performance and Scaling Concerns
@@ -42,9 +42,11 @@ The repository history is only eight commits on 2026-08-23. `README.md`, `.gitig
 | `modes.py` | Seven renderers plus reduction, chunking, and RAG chat | Largest application source | Test pure generation/chunk functions and rerun behavior separately |
 | `adversal_client.py` | Async MCP task-group behavior has deliberate exception placement | One initial commit | Preserve outside-context exception translation; mock MCP responses |
 
-### 6) `[ASK USER]` Questions
+### 6) Confirmed Product Boundary
 
-1. [ASK USER] Is local single-user execution a permanent product boundary, or should remote/shared Streamlit deployment be supported?
+The supported remote path is a private Hugging Face Docker Space for one trusted user.
+Public, protected-but-shared, and multi-process deployments remain unsupported because
+they would share Adversal identity, run data, Qdrant state, and destructive controls.
 
 ### 7) Evidence
 
@@ -57,3 +59,6 @@ The repository history is only eight commits on 2026-08-23. `README.md`, `.gitig
 - `pyproject.toml`
 - `README.md`
 - `.github/workflows/ci.yml`
+- `Dockerfile`
+- `container-entrypoint.sh`
+- `observability.py`

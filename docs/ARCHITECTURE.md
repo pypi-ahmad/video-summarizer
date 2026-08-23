@@ -4,13 +4,22 @@ Architecture material is organized by reader intent:
 
 - [Explanation](./EXPLANATION.md) discusses why the application uses a process-once
   workspace, artifact-first outputs, Qdrant retrieval, two persistence lifetimes, and a
-  local single-process deployment model.
+  trusted single-process deployment model for local and private Docker execution.
 - [Reference](./REFERENCE.md) records exact runtime contracts, model settings, Qdrant
   behavior, storage paths, commands, and limits.
 - [Codebase architecture](./codebase/ARCHITECTURE.md) maps the implementation layers,
   module responsibilities, patterns, and maintenance risks.
+- [Technical guide](./TECHNICAL_GUIDE.md) provides the developer/operator view of
+  runtime contracts, persistence, integrations, security, deployment, and change paths.
 
 The current system diagram is available as
 [HTML](./diagrams/video-summarizer-architecture.html),
 [SVG](./diagrams/video-summarizer-architecture.svg), or
 [PNG](./diagrams/video-summarizer-architecture.png).
+
+Focused diagrams:
+
+- [System architecture](./diagrams/system-architecture.svg) ([Mermaid source](./diagrams/system-architecture.mmd))
+- [Video-processing sequence](./diagrams/video-processing-sequence.svg) ([Mermaid source](./diagrams/video-processing-sequence.mmd))
+- [Job lifecycle](./diagrams/job-lifecycle.svg) ([Mermaid source](./diagrams/job-lifecycle.mmd))
+- [Private Hugging Face deployment](./diagrams/private-space-deployment.html)

@@ -13,4 +13,5 @@ what you need:
   MCP boundary, Qdrant retrieval, persistence, and security tradeoffs.
 
 For implementation-level onboarding, continue to the
+[technical guide](./TECHNICAL_GUIDE.md) or the deeper
 [codebase documentation](./codebase/ARCHITECTURE.md).

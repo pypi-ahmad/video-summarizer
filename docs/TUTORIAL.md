@@ -15,6 +15,9 @@ By the end, one source video will provide:
 
 The video is processed once. Every later view reuses the same Adversal result.
 
+This is a learning exercise, not a reference manual. Keep the default analysis settings
+and use a short, non-sensitive video whose contents you can verify.
+
 ## Before you begin
 
 You need:
@@ -26,6 +29,15 @@ You need:
 
 Agnes AI and Gemini are optional alternatives for generated text. They do not replace
 the OpenAI embeddings used by Ask.
+
+Before continuing, verify the media tools in PowerShell:
+
+```powershell
+ffmpeg -version
+ffprobe -version
+```
+
+Both commands should print version information.
 
 ## 1. Start the application
 
@@ -48,6 +60,9 @@ OPENAI_API_KEY=your-key-here
 Never commit `.env`. Restart `launch.cmd` after changing it, then open the Streamlit
 address shown in the terminal, normally `http://localhost:8501`.
 
+**Checkpoint:** the page title is **Video Summarizer**, and the sidebar contains
+**LLM backend**, **Quota**, and **Danger zone**.
+
 ## 2. Submit a video
 
 1. Keep **OpenAI - GPT-5.6 Luna** selected in the sidebar.
@@ -65,6 +80,10 @@ The status panel checks Adversal every eight seconds. You can close the browser 
 later resume the saved request from the sidebar because its job record is stored in
 `runs/jobs.json`.
 
+**Checkpoint:** while analysis is active, the page shows `RUNNING` and a last-checked
+time. When it finishes, the workspace opens on **Notes** and shows the Adversal request
+ID, analysis profile, and frame density.
+
 ## 3. Inspect the source artifacts
 
 When processing completes, the **Notes** view opens.
@@ -77,6 +96,10 @@ When processing completes, the **Notes** view opens.
 The native bundle contains `notes.md` and only the local images referenced by those
 notes. The OKF 0.2 bundle reorganizes the same material into a video concept, chapter
 concepts, and assets suitable for agent ingestion.
+
+**Checkpoint:** the section and key-frame metrics match the visible source artifacts.
+If Key frames is empty, continue with the notes; the selected source may not contain
+useful visual changes.
 
 ## 4. Ask a grounded question
 
@@ -95,6 +118,9 @@ under `runs/qdrant`, retrieves the five nearest chunks for the active request, a
 the selected chat model to answer only from those excerpts. Similarity is not proof;
 verify important answers against the notes or original video.
 
+**Checkpoint:** the answer includes chapter-based grounding, and **Sources** lists up
+to five retrieved headings with timestamps when available and similarity scores.
+
 ## 5. Create a reusable document
 
 1. Open **Create**.
@@ -106,6 +132,9 @@ The generated document is cached for this browser session by request ID and sele
 backend. Switching backend creates another version. It does not process the video
 again.
 
+For the quiz workflow, confirm that the document contains ten questions, a separate
+answer key, and fifteen flashcards. Those counts are part of the workflow contract.
+
 ## 6. Finish safely
 
 Select **Process another video** to leave the current workspace without deleting its
@@ -114,4 +143,5 @@ in the sidebar and confirm **Clear all runs**.
 
 You have now completed the full process-once workflow. For focused operational tasks,
 continue with [How-to guides](./HOW_TO.md). For exact settings and contracts, see the
-[Reference](./REFERENCE.md).
+[Reference](./REFERENCE.md). Developers and operators should continue with the
+[technical guide](./TECHNICAL_GUIDE.md).

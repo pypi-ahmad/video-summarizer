@@ -12,6 +12,7 @@
 | Google Gemini | HTTPS API through `google-genai` | Optional chat backend | `GOOGLE_API_KEY` | Medium | `llm.py` |
 | Qdrant Client | Embedded persistent vector database | Store and retrieve active-video chunks | Local filesystem; no credentials | Medium | `vector_store.py` |
 | Public video sources | URL input consumed by Adversal/its `yt-dlp` dependency | Remote video ingestion | Source-dependent | High | `app.py`, `README.md`, `uv.lock` |
+| Hugging Face Spaces and Buckets | Private Docker hosting and persistent mounted storage | Optional hosted runtime | Hugging Face account; provider keys configured as Space secrets | Optional | `Dockerfile`, `container-entrypoint.sh`, `README.md` |
 
 ### 2) Data Stores
 
@@ -21,6 +22,7 @@
 | `runs/<job>/` | Uploaded video, `notes.md`, and extracted images | `app.py`, `pipeline.Job`, `artifacts.py` | Unbounded retention; data is stored unencrypted | source modules |
 | `runs/qdrant/` | Shared local Qdrant collection with request-filtered video chunks | `vector_store.index_video()` | Single-process local-mode lock; deleted by Clear all runs | `vector_store.py` |
 | Streamlit session state | Active job, generated documents, index-ready markers and chat history | `app.py`, `modes.py` | Lost on session expiry; separate from disk registry and Qdrant | source modules |
+| `/data` bucket mount | Hosted runs, Adversal OAuth state, and rotating logs | `container-entrypoint.sh` | One shared trust boundary; private single-user deployment only | deployment files |
 
 No external database, queue, event bus, service mesh or cache is configured.
 
@@ -42,7 +44,8 @@ No external database, queue, event bus, service mesh or cache is configured.
 ### 5) Observability for Integrations
 
 - UI shows Adversal status and last-check time; expected tool errors are displayed.
-- No application logs, request correlation, metrics, traces, cost counters or health endpoints exist.
+- Application events go to the terminal and a rotating file with component names, request IDs where applicable, timing, statuses, and error types.
+- Log filtering omits user content and redacts configured provider keys and common token forms. Metrics, distributed traces, cost counters, and health endpoints do not exist.
 - LLM failures and latency lack provider-labelled UI handling.
 - MCP subprocess stderr/diagnostic retention is `[TODO]`; source only consumes returned MCP content.
 
@@ -55,3 +58,6 @@ No external database, queue, event bus, service mesh or cache is configured.
 - `.env.example`
 - `README.md`
 - `uv.lock`
+- `observability.py`
+- `Dockerfile`
+- `container-entrypoint.sh`

@@ -1,191 +1,452 @@
+---
+title: Video Summarizer
+emoji: 🎬
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 7860
+license: mit
+short_description: Turn videos into notes, key frames, searchable knowledge, and reusable content.
+---
+
+<div align="center">
+
 # Video Summarizer
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/built%20with-Streamlit-FF4B4B)](https://streamlit.io/)
-[![uv](https://img.shields.io/badge/managed%20with-uv-DE5FE9)](https://docs.astral.sh/uv/)
+Turn one video into structured notes, key visual frames, grounded answers, and reusable
+learning or publishing content.
 
-Process a video once with [Adversal](https://adversal.ai), inspect its Markdown and key frames, search it with Qdrant-backed RAG, and create study or publishing outputs from one Streamlit workspace.
+[![CI](https://img.shields.io/github/actions/workflow/status/pypi-ahmad/video-summarizer/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/pypi-ahmad/video-summarizer/actions/workflows/ci.yml)
+[![Python 3.13+](https://img.shields.io/badge/Python-3.13%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.62-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![uv](https://img.shields.io/badge/managed%20with-uv-DE5FE9?style=flat-square)](https://docs.astral.sh/uv/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](./LICENSE)
 
-**Repository:** https://github.com/pypi-ahmad/video-summarizer
+[Get started](#getting-started) · [Workflows](#what-you-can-create) ·
+[Architecture](#architecture) · [Documentation](#documentation)
 
-## Index
+</div>
 
-- [Overview](#overview)
-- [Features](#features)
-- [How it works](#how-it-works)
-- [Prerequisites](#prerequisites)
-- [Getting started](#getting-started)
-- [Configuration](#configuration)
-- [Usage](#usage)
-- [Project structure](#project-structure)
-- [Known limitations](#known-limitations)
-- [Documentation](#documentation)
-- [Resources](#resources)
+Video Summarizer is a single-user Streamlit workspace built around
+[Adversal](https://adversal.ai). Upload a video or provide a public URL once; Adversal
+turns it into chaptered Markdown and selected screenshots. The app then reuses those
+artifacts for semantic search, study material, operational documents, and publishable
+content without analyzing the raw video again.
 
-## Overview
+> [!IMPORTANT]
+> Adversal is a remote video-understanding service exposed through a local
+> `adversal-cli` MCP subprocess. Video analysis happens on Adversal's infrastructure;
+> this application stores the returned Markdown, frames, and request metadata locally.
 
-[Adversal](https://adversal.ai) ships as a local [Model Context Protocol](https://modelcontextprotocol.io) server (`adversal-cli`) that turns a video - a local file or a public URL - into chaptered Markdown notes with extracted screenshots. This project exposes those source artifacts directly, indexes the Markdown in local Qdrant, and lets the same analysis serve nine different jobs without processing the video again:
+## Why this project exists
 
-| Mode | What you get |
+Long videos are awkward inputs for language models. Full transcripts consume large
+context windows, while transcript-only pipelines lose important slides, diagrams, code,
+and scenes. This project separates the expensive multimodal step from later reuse:
+
+1. Adversal extracts structured chapters and representative visual frames.
+2. The app keeps those artifacts as the inspectable source of truth.
+3. Qdrant retrieves only relevant chapters for questions.
+4. A selected LLM transforms the notes into a purpose-built document.
+
+The result is one durable video workspace rather than a separate processing pipeline for
+every output.
+
+## What you can create
+
+| Workflow | Output |
 | --- | --- |
-| **Study notes** | Chaptered notes + screenshots, rendered as-is - Adversal's own output is already the deliverable |
-| **Meeting/webinar summarizer** | A "Decisions / Action Items" digest above the full notes |
-| **Searchable knowledge base** | Ask questions about the video; answers are grounded in retrieved chapters with citations |
-| **Content triage** | A few bullets plus a watch/skim/skip recommendation, so you don't have to read the full notes to decide |
-| **Video &rarr; blog post** | A title, intro hook, and conclusion added on top of the already blog-shaped chapter notes, downloadable as Markdown |
-| **Quiz and flashcards** | 10 questions, a separate answer key, and 15 flashcards |
-| **SOP/how-to guide** | A practical procedure with prerequisites, cautions, verification, troubleshooting, and relevant screenshots |
+| **Study notes** | Original chaptered Markdown with timestamps and referenced screenshots |
+| **Meeting/webinar summary** | Two compact bullet sections: Decisions and Action Items, including owners when identified |
+| **Searchable knowledge base** | Grounded answers from the five nearest video chunks, with chapter headings, timestamps, and scores |
+| **Content triage** | Three to five summary bullets plus a watch-in-full, skim, or skip recommendation with a reason |
+| **Blog post** | Title, opening hook, preserved chapter body and screenshots, and conclusion |
+| **Quiz and flashcards** | Six multiple-choice questions, four short-answer questions, an explained answer key, and fifteen flashcards |
+| **SOP/how-to guide** | Purpose, prerequisites, numbered procedure, cautions, verification, troubleshooting, and supported screenshots |
 | **Interview insight pack** | Executive summary, themes, Q&A insights, paraphrased statements, and follow-up questions |
-| **FAQ/help-center article** | A support-ready overview, FAQs, troubleshooting, related topics, and relevant screenshots |
+| **FAQ/help-center article** | Title, overview, organized FAQs, supported troubleshooting, related topics, and useful screenshots |
+
+## Feature guide
+
+### Video input and source analysis
+
+The submission form accepts one source at a time:
+
+| Feature | Behavior |
+| --- | --- |
+| **Local upload** | Accepts `.mp4`, `.mov`, `.mkv`, and `.webm`; stores the file inside a unique UUID-bearing job directory |
+| **Public URL** | Passes the URL to Adversal's remote downloader; the app does not download it itself |
+| **Analysis profile** | Generic, Lesson/tutorial, Interview, or Meeting/webinar changes how Adversal structures the source analysis |
+| **Visual-frame density** | Minimal, Selective, or Generous controls how many representative frames Adversal returns |
+| **Process-once model** | The selected profile and density apply once; all later views reuse the completed Markdown and images |
+| **Non-blocking progress** | A Streamlit fragment polls Adversal every eight seconds while the rest of the application remains responsive |
+
+Uploaded filenames are reduced to a safe basename and verified to remain inside their
+job directory. URL access, authentication, and download duration still depend on the
+source host and Adversal.
+
+### Notes and visual evidence
+
+The completed Adversal result is exposed directly instead of being hidden behind an LLM
+summary:
+
+- **Notes** renders the original chaptered Markdown and its local image references.
+- **Metrics** show section count, safe referenced-frame count, and analysis profile.
+- **Key frames** presents screenshots in a three-column gallery, twelve per page, with
+  captions taken from Markdown alt text or filenames.
+- **Path containment** rejects Markdown images outside the owning job directory before
+  they can be displayed or archived.
+- **Missing-artifact handling** reports when Adversal marked a job complete but
+  `notes.md` is absent, or when no safe referenced frames were returned.
+
+### Searchable video knowledge base
+
+The **Ask** view turns completed notes into persistent video RAG:
+
+1. Notes are split along Adversal chapter separators and headings into chunks targeting
+   at most 1,500 characters.
+2. OpenAI `text-embedding-3-small` embeds each chunk.
+3. Qdrant stores deterministic points under `runs/qdrant` with heading, approximate
+   timestamp, text, notes hash, model, and active request ID.
+4. Each question retrieves the five nearest chunks with a mandatory filter for the
+   current video.
+5. The selected chat model answers only from those excerpts and is instructed to say
+   when they do not contain the answer.
+
+Answers include an expandable **Sources** list with chapter headings, timestamps when
+available, and cosine scores. **Full notes** remains available beside the chat so users
+can verify model output. Indexing is idempotent for unchanged notes; changed notes
+replace only that video's points.
 
 > [!NOTE]
-> Adversal is not a REST API - there's no HTTP endpoint or API key to configure. It's a local subprocess launched over stdio via MCP, authenticated once through a browser OAuth flow. See [How it works](#how-it-works).
+> Ask always requires `OPENAI_API_KEY` for embeddings. Agnes or Gemini may answer the
+> final question, but they do not replace the fixed OpenAI embedding model.
 
-## Features
+### Generated documents
 
-- **Process once, reuse everywhere.** Choose the Adversal video type and frame density once, then move between Notes, Key frames, Ask, and Create views.
-- **Agent-ready exports.** Download the original Markdown + referenced images or a chapter-level [OKF 0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) bundle.
-- **Multi-provider LLM backend.** Switch between OpenAI (`gpt-5.6-luna`, medium reasoning effort), [Agnes AI](https://www.agnes-ai.com) (`agnes-2.5-flash`), and Google Gemini (`gemini-3.5-flash-lite` or `gemini-3.7-flash`, medium thinking effort) from the sidebar - no code changes.
-- **Non-blocking async polling.** Adversal's video pipeline can take minutes; the app polls it with a `st.fragment` timer instead of freezing the whole page.
-- **Resumable jobs.** Every submitted job is persisted to `runs/jobs.json`, so closing the tab (or restarting the app) doesn't lose track of a still-running job.
-- **Persistent Qdrant RAG.** Chapter-aware chunks use OpenAI `text-embedding-3-small` and a disk-backed Qdrant collection under `runs/qdrant`; searches are filtered to the active video.
+The **Create** view offers seven grounded transformations listed in
+[What you can create](#what-you-can-create). Every generated document:
 
-## How it works
+- uses the completed Adversal notes rather than the raw video;
+- exposes the source notes in an expander for verification;
+- renders supported local screenshots where the workflow preserves image references;
+- downloads as a workflow-specific Markdown file; and
+- is cached by `(request_id, selected_backend)` so Streamlit reruns do not repeat paid
+  calls.
 
-```
-                 upload / URL
-                      |
-                      v
-   Streamlit  --(MCP stdio)-->  adversal-cli  --(async)-->  Adversal backend
-   (app.py)                    (subprocess per call)
-      |                                                          |
-      | poll check_video_status (st.fragment, every 8s)          |
-      |<---------------------------------------------------------
-      v
-   notes.md + images written to runs/<job>/
-      |
-      v
-   one reusable workspace
-      |-- Notes + key-frame gallery + native/OKF exports
-      |-- Qdrant index -> active-video semantic search -> grounded answer
-      `-- selected LLM -> meeting/blog/quiz/SOP/interview/FAQ output
-      |
-      v
-   rendered in Streamlit
-```
+Notes up to 50,000 characters are sent to final generation directly. Longer notes are
+condensed in batches of at most 30,000 characters until they fit. Blog, SOP, and FAQ
+workflows explicitly preserve supported Markdown image references during reduction.
+Changing the backend creates a separate cached version without processing the video
+again.
 
-Each call to Adversal (`process_video`, `check_video_status`, `check_remaining_quota`, `authenticate`) spawns a fresh `adversal-cli` subprocess, makes one MCP tool call, and exits. This works because Adversal's local job registry persists on disk across restarts - a brand-new subprocess can still poll an old `request_id`. See [`adversal_client.py`](./adversal_client.py).
+### Downloads and agent-ready exports
 
-## Prerequisites
+The **Notes** view provides three source-artifact formats:
 
-- [uv](https://docs.astral.sh/uv/) - manages the Python interpreter, virtual environment, and dependencies
-- `ffmpeg` / `ffprobe` on `PATH` - required by `adversal-cli` for local video inspection
-- An [Adversal](https://adversal.ai) account (free tier: 100 minutes/month) - sign-in happens via a browser popup on first use, no API key needed
-- A provider key for LLM-backed modes: [OpenAI](https://platform.openai.com/api-keys), [Agnes AI](https://www.agnes-ai.com), and/or [Google AI Studio](https://aistudio.google.com/apikey) for Gemini. Notes, key-frame viewing, and artifact downloads need no LLM key; Ask always needs OpenAI embeddings.
+| Download | Contents | Best for |
+| --- | --- | --- |
+| **Markdown** | Adversal's completed `notes.md` | Reading, editing, or passing text to another tool |
+| **Native bundle** | Source Markdown plus only its safely resolved referenced images | Moving the original Adversal result as one ZIP |
+| **OKF 0.2 bundle** | `index.md`, `video.md`, chapter concepts, and image assets | Ingestion by agents or knowledge-catalog workflows |
+
+Generated Create outputs have their own **Download as Markdown** action. Bundles exclude
+the uploaded video, Qdrant data, job history, and unreferenced files.
+
+### Provider selection
+
+The **LLM backend** sidebar control switches chat and document generation without code
+changes:
+
+- OpenAI `gpt-5.6-luna` with medium reasoning effort;
+- Agnes AI `agnes-2.5-flash`;
+- Google `gemini-3.5-flash-lite` with medium thinking; or
+- Google `gemini-3.7-flash` with medium thinking.
+
+Provider credentials come from user environment variables or an optional gitignored
+`.env`. Existing environment values win. There is no automatic provider fallback, so a
+missing key or provider failure remains visible instead of silently changing models.
+
+### Authentication and quota
+
+Adversal uses browser OAuth rather than an application API key. When any Adversal tool
+returns `AUTHENTICATION REQUIRED`, normal rendering stops and the app shows an
+**Authenticate** action:
+
+- locally, the browser flow opens on the computer running Streamlit;
+- in a private Hugging Face Space, the app instructs the user to open the temporary URL
+  printed in runtime logs; and
+- the persisted Adversal directory lets later MCP subprocesses reuse the authenticated
+  session.
+
+The sidebar **Quota** panel calls Adversal's `check_remaining_quota` tool and displays
+the current response without starting video processing.
+
+### Resumable jobs and workspace controls
+
+Each successful submission is stored in `runs/jobs.json` with its request ID, status,
+source, profile, density, output directory, and timestamps. Writes use a process-local
+lock and atomic replacement.
+
+- **Resume a previous job** lists the ten newest records with source, status, and request
+  prefix.
+- **Process another video** leaves a completed workspace without deleting it.
+- **Start over** leaves a failed workspace while retaining its persisted record.
+- **Danger zone → Clear all runs** closes the embedded Qdrant client and permanently
+  deletes uploads, jobs, notes, frames, and vectors after explicit confirmation.
+
+Generated documents and Ask chat history are session-scoped; source artifacts, jobs,
+and vectors are durable.
+
+### Logging and diagnostics
+
+Application progress appears in the `launch.cmd` terminal and in
+`logs/video-summarizer.log`. Logging is safe across Streamlit reruns, rotates at 5 MiB,
+and retains three backups. `VIDEO_SUMMARIZER_LOG_LEVEL` selects `DEBUG`, `INFO`,
+`WARNING`, `ERROR`, or `CRITICAL`.
+
+Events contain operational metadata such as components, request IDs, models, counts,
+durations, statuses, and error types. The application deliberately omits filenames,
+URLs, prompts, transcripts, generated content, and exception messages; configured keys
+and common token formats are redacted.
+
+### Local and private hosted operation
+
+- **Windows launcher:** installs uv when needed, pins Python 3.13.13, creates `.venv`,
+  performs a locked sync, creates `.env` when missing, checks FFmpeg, and starts the app.
+- **Manual uv workflow:** supports developers who manage the environment directly.
+- **Docker image:** packages Python, uv, FFmpeg, the app, and `adversal-cli` for port
+  7860.
+- **Persistent Space storage:** maps `/data/runs`, `/data/adversal`, and `/data/logs` so
+  application data and OAuth state survive container restarts.
+- **Private single-user boundary:** public/shared hosting is intentionally unsupported
+  because users would share identity, files, vectors, history, and deletion controls.
+
+## Architecture
+
+[![Video Summarizer system architecture](./docs/diagrams/system-architecture.svg)](./docs/diagrams/video-summarizer-architecture.html)
+
+The Streamlit app launches a fresh `adversal-cli` MCP subprocess for each submission,
+status, quota, or authentication call. Adversal's local registry retains remote request
+state, so a new subprocess can poll an earlier `request_id`. Completed artifacts become
+the shared input for four workspace views:
+
+| View | Responsibility |
+| --- | --- |
+| **Notes** | Inspect source Markdown and download Markdown, native, or OKF bundles |
+| **Key frames** | Browse only safe, locally referenced images |
+| **Ask** | Index, retrieve, answer, and expose supporting chapters |
+| **Create** | Generate one of seven cached Markdown documents |
+
+More diagrams: [processing sequence](./docs/diagrams/video-processing-sequence.svg) ·
+[job lifecycle](./docs/diagrams/job-lifecycle.svg) ·
+[private Space deployment](./docs/diagrams/private-space-deployment.html)
 
 ## Getting started
 
-### Quick start (Windows)
+### Prerequisites
+
+- Windows 11 for the one-command launcher, or any environment capable of running the
+  manual uv workflow
+- `ffmpeg` and `ffprobe` on `PATH`
+- An [Adversal](https://adversal.ai) account
+- A provider key only for the LLM-backed features you plan to use
+
+Notes, frames, and artifact downloads do not require an LLM key. **Ask always requires
+`OPENAI_API_KEY`** because embeddings use OpenAI regardless of the selected chat model.
+
+### Windows quick start
+
+From the repository root:
 
 ```bat
 launch.cmd
 ```
 
-On first run this installs `uv` for the current Windows user when needed, installs Python 3.13.13 through uv, creates `.venv` in the project root, copies `.env.example` to `.env` if missing, installs the locked dependencies, and starts the app through the venv's Python. Re-running it is safe - it synchronizes the environment and launches.
+On its first run, the launcher:
 
-### Manual setup
+1. installs uv for the current Windows user when missing;
+2. installs Python 3.13.13;
+3. creates `.venv` in the project root;
+4. synchronizes the locked production and development dependencies;
+5. creates `.env` from `.env.example` when needed; and
+6. starts Streamlit with live logs in the same terminal.
+
+Open the URL printed by Streamlit, normally <http://localhost:8501>. The first Adversal
+operation may request browser authentication.
+
+### Manual uv setup
 
 ```bash
 uv python pin 3.13.13
-uv venv
-uv sync --all-groups
-cp .env.example .env   # fill in your keys
+uv sync --locked --all-groups
+cp .env.example .env   # optional when keys already exist in the environment
 uv run streamlit run app.py
 ```
 
-The first video you process will prompt an Adversal sign-in in your browser - this only happens once per machine.
+On PowerShell, replace the copy command with:
+
+```powershell
+Copy-Item .env.example .env
+```
 
 ## Configuration
 
-Copy [`.env.example`](./.env.example) to `.env` and fill in whichever providers you plan to use. Keys already present as system environment variables are used as-is; `.env` is only a fallback (`python-dotenv` never overrides an already-set variable).
+The app reads credentials from the process environment. A local `.env` is an optional
+fallback and never overrides existing environment variables.
 
-| Variable | Required for | Notes |
+| Variable | Used for | Required? |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | OpenAI backend, and embeddings for the knowledge-base mode | Embeddings always use OpenAI regardless of the selected chat backend |
-| `OPENAI_BASE_URL` | Optional | Only set this to route through a proxy/gateway instead of the default OpenAI endpoint |
-| `AGNES_API_KEY` | Agnes AI backend | [Agnes AI console](https://www.agnes-ai.com) |
-| `GOOGLE_API_KEY` | Gemini backends | [Google AI Studio](https://aistudio.google.com/apikey) |
+| `OPENAI_API_KEY` | OpenAI chat and all Ask embeddings | For OpenAI or Ask |
+| `OPENAI_BASE_URL` | Optional OpenAI-compatible gateway | No |
+| `AGNES_API_KEY` | Agnes AI chat | For Agnes |
+| `GOOGLE_API_KEY` | Gemini chat | For Gemini |
+| `VIDEO_SUMMARIZER_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` | No; defaults to `INFO` |
 
-## Usage
+Configured model choices:
 
-1. Upload a video or paste a public URL, then choose its Adversal video type and key-frame density.
-2. Click **Process video**. A status panel polls Adversal until the one reusable analysis completes.
-3. Use **Notes** for Markdown and agent bundles, **Key frames** for the visual gallery, **Ask** for Qdrant-backed RAG, or **Create** for an LLM-generated output.
-4. Use **Process another video** when you want a new source; previous jobs remain resumable.
+| Provider | Model | Reasoning setting |
+| --- | --- | --- |
+| OpenAI | `gpt-5.6-luna` | medium reasoning effort |
+| Agnes AI | `agnes-2.5-flash` | provider default |
+| Google | `gemini-3.5-flash-lite` | medium thinking |
+| Google | `gemini-3.7-flash` | medium thinking |
 
-The sidebar also has:
+> [!CAUTION]
+> Never commit `.env`, paste secret values into issues, or store provider keys as
+> non-secret Hugging Face variables.
 
-- **Quota** - check remaining Adversal minutes for the month
-- **Resume a previous job** - reattach to one of the ten newest persisted jobs
-- **Danger zone** - clear all local run data (`runs/`)
+## Using the app
+
+1. Select **Upload file** or **Public URL**.
+2. Choose the video type: Generic, Lesson/tutorial, Interview, or Meeting/webinar.
+3. Choose Minimal, Selective, or Generous key-frame extraction.
+4. Select **Process video** and let the status panel poll Adversal.
+5. Review **Notes** and **Key frames** before relying on generated material.
+6. Use **Ask** for grounded questions or **Create** for a reusable document.
+
+The sidebar can check Adversal quota, resume one of the ten newest persisted jobs, switch
+the generation backend, or permanently clear all run data.
+
+> [!TIP]
+> If Adversal cannot download a long or protected URL, upload an authorized local file.
+> Remote URL ingestion is limited by the source host and Adversal's download timeout.
+
+## Data and persistence
+
+```text
+runs/
+├── jobs.json
+├── qdrant/
+└── <timestamp>_<uuid>_<video-slug>/
+    ├── <uploaded-video>
+    ├── notes.md
+    └── <referenced frames>
+```
+
+Generated documents and Ask chat history live in Streamlit session state. Jobs, source
+artifacts, and vectors persist on disk. Run data is not encrypted and has no automatic
+retention period; use **Danger zone → Clear all runs** when it is no longer needed.
+
+## Private Hugging Face deployment
+
+The repository includes a Docker image and entrypoint for a **private, single-user**
+Hugging Face Space. A private bucket is mounted at `/data` so these survive restarts:
+
+- `/data/runs` — uploaded videos, jobs, Markdown, frames, and Qdrant data;
+- `/data/adversal` — Adversal OAuth state and local request registry; and
+- `/data/logs` — rotating application logs.
+
+The target bucket `pypi-ahmad/video-summarizer-data` exists. The target Space has not
+been created because Docker Space creation currently requires Hugging Face PRO. See the
+[deployment procedure](./docs/HOW_TO.md#deploy-to-hugging-face-spaces).
+
+> [!WARNING]
+> Do not deploy this application publicly or for several users. Visitors would share one
+> Adversal identity, job history, Qdrant index, uploaded data, and destructive controls.
+
+## Technology stack
+
+| Area | Technology |
+| --- | --- |
+| UI and session orchestration | Streamlit |
+| Runtime and dependency management | Python 3.13.13 and uv |
+| Video understanding | Adversal through MCP stdio |
+| Retrieval | Qdrant Client with OpenAI embeddings |
+| Text generation | OpenAI, Agnes AI, and Google Gemini |
+| Media inspection | FFmpeg and ffprobe |
+| Quality | Ruff, ty, pytest, and GitHub Actions |
+| Hosted packaging | Docker and Hugging Face Spaces |
 
 ## Project structure
 
-```
+```text
 video-summarizer/
-├── app.py               # Streamlit entry point: sidebar, mode dispatch
-├── adversal_client.py   # MCP stdio wrapper around adversal-cli
-├── pipeline.py           # Job persistence, async status polling, markdown+image rendering
-├── artifacts.py           # Key-frame discovery and native/OKF ZIP exports
-├── modes.py              # Qdrant chunking/chat and seven generated-output renderers
-├── vector_store.py       # Persistent local Qdrant indexing and active-video search
-├── llm.py                # Multi-provider chat/embeddings wrapper
-├── launch.cmd             # One-file Windows bootstrap + launch
-├── launch.bat             # Legacy compatibility launcher; launch.cmd is canonical
-├── .env.example           # Required environment variables, documented
-├── pyproject.toml         # uv-managed dependencies
-├── tests/                 # Security, caching, and concurrent-persistence regressions
-├── docs/
-│   ├── ARCHITECTURE.md    # Technical reference: modules, data flow, design decisions
-│   └── USAGE.md            # Step-by-step how-to guide for every mode
-└── runs/                  # Gitignored jobs plus persistent qdrant/ vector storage
+├── app.py                    # Streamlit entry point and workspace routing
+├── pipeline.py               # Job persistence, polling, and artifact rendering
+├── adversal_client.py        # MCP adapter for adversal-cli
+├── artifacts.py              # Safe frame discovery and ZIP/OKF exports
+├── modes.py                  # Search and seven generated-document workflows
+├── vector_store.py           # Persistent, active-video Qdrant retrieval
+├── llm.py                    # Chat-provider dispatch and OpenAI embeddings
+├── observability.py          # Terminal/file logging and secret redaction
+├── launch.cmd                # Canonical Windows bootstrap and launcher
+├── Dockerfile                # Private Hugging Face runtime image
+├── container-entrypoint.sh   # Persistent /data path mapping
+├── tests/                    # Regression and observability tests
+└── docs/                     # User, operator, architecture, and codebase guides
 ```
 
-## Known limitations
+## Development
 
-- Adversal's OAuth sign-in opens a browser **on the machine running the Streamlit server**. Fine for local single-user use (the target for this project); not suited to a shared/remote deployment as-is.
-- One video workspace is active per browser session; use the resume picker to switch to another persisted job.
-- Local run data (`runs/`) is never auto-deleted; use the sidebar's "Clear all runs" when needed.
-- Uploaded videos, generated notes, images, and indexes are stored unencrypted under `runs/`; avoid shared or remote deployment for sensitive content.
-- Qdrant runs in local mode for this single-process desktop app. Move to Qdrant Server or Cloud before using multiple Streamlit server processes.
+Install the locked environment and run the same quality gates used by CI:
+
+```bash
+uv sync --locked --all-groups
+uv run ruff check .
+uv run ty check
+uv run pytest -q
+```
+
+The current suite covers filesystem containment, export safety, provider contracts,
+cache behavior, long-note reduction, Qdrant filtering and idempotency, concurrent job
+persistence, and logging redaction/rotation. External Adversal and model services are
+not called during tests.
+
+For module ownership and safe change paths, read the
+[developer/operator technical guide](./docs/TECHNICAL_GUIDE.md).
+
+## Current limitations
+
+- One video workspace is active per browser session.
+- Generated documents and chat history are session-scoped rather than persisted.
+- Embedded Qdrant and `jobs.json` locking support one server process only.
+- Public video URLs do not have an application-level host or private-network policy.
+- There is no automatic provider fallback, retention cleanup, or application-level
+  encryption.
+- Model output and retrieval similarity require human verification for consequential
+  use.
 
 ## Documentation
 
-- [Tutorial: process your first video](./docs/TUTORIAL.md)
-- [How-to guides](./docs/HOW_TO.md)
-- [Reference](./docs/REFERENCE.md)
-- [Explanation and design rationale](./docs/EXPLANATION.md)
-- [Documentation chooser](./docs/USAGE.md)
-- [Architecture chooser and diagrams](./docs/ARCHITECTURE.md)
-- [Codebase onboarding](./docs/codebase/ARCHITECTURE.md)
+| Need | Start here |
+| --- | --- |
+| Complete a first run | [Tutorial](./docs/TUTORIAL.md) |
+| Perform a specific task or troubleshoot | [How-to guides](./docs/HOW_TO.md) |
+| Look up exact inputs, models, paths, and contracts | [Reference](./docs/REFERENCE.md) |
+| Understand design decisions | [Explanation](./docs/EXPLANATION.md) |
+| Develop or operate the system | [Technical guide](./docs/TECHNICAL_GUIDE.md) |
+| Browse architecture diagrams | [Architecture index](./docs/ARCHITECTURE.md) |
+| Onboard into the codebase | [Codebase documentation](./docs/codebase/ARCHITECTURE.md) |
 
-## Resources
+## Getting help
 
-References for the APIs and tools this project builds on:
-
-- [Adversal - MCP documentation](https://adversal.ai/documentation/mcp)
-- [Model Context Protocol - Python SDK](https://github.com/modelcontextprotocol/python-sdk)
-- [OpenAI - Reasoning models guide](https://developers.openai.com/api/docs/guides/reasoning) (`reasoning_effort`)
-- [Agnes AI - API overview](https://www.agnes-ai.com/en/docs/overview)
-- [Agnes AI - Agnes 2.5 Flash](https://www.agnes-ai.com/en/docs/agnes-25-flash)
-- [Google Gemini - Thinking / reasoning levels](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/thinking)
-- [google-genai - Python SDK](https://pypi.org/project/google-genai/)
-- [Streamlit documentation](https://docs.streamlit.io/)
-- [uv documentation](https://docs.astral.sh/uv/)
-- [Ruff documentation](https://docs.astral.sh/ruff/)
-- [ty documentation](https://docs.astral.sh/ty/)
+Check [Recover from common failures](./docs/HOW_TO.md#recover-from-common-failures) and
+the terminal or `logs/video-summarizer.log` first. If the problem is reproducible and
+project-specific, [open a GitHub issue](https://github.com/pypi-ahmad/video-summarizer/issues)
+with the failing operation, sanitized log metadata, and your platform details. Never
+include API keys, video contents, transcripts, URLs, or OAuth tokens.
 
 ---
 
-<p align="center">Made with ❤️ by Ahmad Mujtaba</p>
+<p align="center">Built by Ahmad Mujtaba</p>

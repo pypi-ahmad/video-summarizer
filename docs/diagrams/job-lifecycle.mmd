@@ -1,0 +1,20 @@
+stateDiagram-v2
+    direction LR
+    [*] --> RUNNING: process_video returns request_id
+    RUNNING --> RUNNING: poll returns RUNNING or UNKNOWN
+    RUNNING --> AuthRequired: authentication required
+    AuthRequired --> RUNNING: OAuth completes and app reruns
+    RUNNING --> COMPLETED: poll returns COMPLETED
+    RUNNING --> FAILED: poll or Adversal error
+    COMPLETED --> Workspace: open saved artifacts
+    Workspace --> COMPLETED: resume same job later
+    FAILED --> [*]: start over
+
+    note right of RUNNING
+        Persisted in runs/jobs.json
+        Polled every 8 seconds
+    end note
+    note right of COMPLETED
+        notes.md and frames remain durable
+        Qdrant can be rebuilt or reused
+    end note

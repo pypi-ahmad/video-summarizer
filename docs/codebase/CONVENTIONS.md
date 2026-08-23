@@ -31,8 +31,9 @@
 - Integration layer: `AdversalAuthRequiredError` separates authentication from general `AdversalError`; invalid local argument combinations raise `ValueError`.
 - UI layer: expected Adversal errors are caught and displayed with `st.error`; authentication sets session state and reruns.
 - LLM SDK errors, malformed persisted JSON, missing result files and Qdrant failures currently propagate to Streamlit.
-- Logging: no logging library, structured fields, metrics or tracing are configured.
-- Sensitive data: API keys are read from environment or gitignored `.env`; code does not log key values. `[TODO]` No explicit error-redaction or telemetry policy exists.
+- Logging: modules use child loggers from `observability.get_logger()` and metadata-only event names; setup is idempotent across Streamlit reruns.
+- Sensitive data: API keys are read from environment or gitignored `.env`. The logging filter redacts known key values and common token formats; handled failures record exception types without exception messages or user content.
+- Runtime verbosity uses `VIDEO_SUMMARIZER_LOG_LEVEL`; rotating logs use 5 MiB files with three backups. Metrics and tracing are not configured.
 
 ### 5) Testing Conventions
 
@@ -47,6 +48,8 @@
 - `app.py`
 - `pipeline.py`
 - `adversal_client.py`
+- `observability.py`
+- `tests/test_observability.py`
 - `tests/test_regressions.py`
 - `.env.example`
 - `uv run ruff check .`

@@ -25,13 +25,13 @@ uv run ty check
 
 | Scope | Covered? | Typical target | Notes |
 |-------|----------|----------------|-------|
-| Unit | Partial | Upload paths, Markdown images, provider contracts, output registry, reduction, Qdrant filtering, exports, LLM caching | Sixteen focused regressions exist |
+| Unit | Partial | Upload paths, Markdown images, provider contracts, output registry, reduction, Qdrant filtering, exports, LLM caching, logging | Twenty-one focused regressions exist |
 | Integration | Partial | Concurrent JSON persistence and directory allocation | Uses temporary local files; external services remain mocked/uncovered |
 | E2E | No | Upload/URL through completion and mode rendering | No automated live-service flow exists |
 
 ### 4) Mocking and Isolation Strategy
 
-- `monkeypatch` replaces session state, provider clients, LLM calls, embeddings and pipeline paths; Qdrant tests use its in-memory client.
+- `monkeypatch` replaces session state, provider clients, LLM calls, embeddings, logging limits and pipeline paths; Qdrant tests use its in-memory client.
 - `tmp_path` isolates uploaded files, indexes and job persistence.
 - External Adversal and provider calls are not made by the regression suite.
 
@@ -47,6 +47,7 @@ uv run ty check
 - `pyproject.toml`
 - `uv.lock`
 - `tests/test_regressions.py`
+- `tests/test_observability.py`
 - `.github/workflows/ci.yml`
 - `uv run pytest -q`
 - `uv run ruff check .` output: `All checks passed!`

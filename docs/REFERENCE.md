@@ -19,6 +19,35 @@ and runtime contracts. For task instructions, use the [how-to guides](./HOW_TO.m
 `ffmpeg` and `ffprobe` must be available on `PATH` for local video inspection by
 Adversal.
 
+### Hugging Face Space
+
+| Item | Value |
+| --- | --- |
+| Space | `pypi-ahmad/video-summarizer` |
+| Visibility | Private |
+| SDK | Docker |
+| Hardware | CPU Basic |
+| Application port | `7860` |
+| Persistent bucket | `pypi-ahmad/video-summarizer-data` |
+| Bucket mount | `/data` |
+
+Hugging Face currently requires a PRO subscription to create this Docker Space. CPU
+Basic has no hourly hardware charge, but compute-Space creation is subscription-gated.
+The private bucket exists; the Space itself is pending that subscription requirement.
+The table describes the checked-in deployment target, not a currently running service.
+
+The container startup script maps these persistent paths:
+
+| Persistent path | Runtime path | Contents |
+| --- | --- | --- |
+| `/data/runs` | `/home/user/app/runs` | Jobs, uploads, notes, frames, Qdrant |
+| `/data/adversal` | `/home/user/.adversal` | Adversal OAuth session and job registry |
+| `/data/logs` | `/home/user/app/logs` | Rotating application logs |
+
+Space secrets are exposed as environment variables at runtime. Secret values are never
+part of the image or repository. Adversal authentication is completed interactively
+from the private runtime-log URL and persisted in `/data/adversal`.
+
 ## Environment variables
 
 | Variable | Required for | Default or behavior |
@@ -27,6 +56,7 @@ Adversal.
 | `OPENAI_BASE_URL` | Optional OpenAI-compatible proxy or gateway | OpenAI SDK default endpoint |
 | `AGNES_API_KEY` | Agnes chat | No default |
 | `GOOGLE_API_KEY` | Gemini chat | No default |
+| `VIDEO_SUMMARIZER_LOG_LEVEL` | Application logging verbosity | `INFO` |
 
 `python-dotenv` loads `.env` with `override=False`; existing process environment values
 win. Adversal authentication is managed by `adversal-cli` through browser OAuth and has
@@ -163,6 +193,19 @@ replacement. Run data is unencrypted and has no automatic retention policy. Gene
 documents and chat history remain in Streamlit session state rather than being written
 to this tree.
 
+## Logging
+
+Application events are written to the visible terminal and to
+`logs/video-summarizer.log`. The rotating file is limited to 5 MiB with three backups.
+Supported levels are `DEBUG`, `INFO`, `WARNING`, `ERROR`, and `CRITICAL`; an invalid
+value falls back to `INFO` and emits a warning.
+
+Logging setup is process-wide and idempotent across Streamlit reruns. Application logs
+record only operational metadata. Known provider-key values and common token formats
+are redacted, and handled failures omit exception messages that could contain remote or
+user content. Streamlit writes its own server messages directly to the terminal; uv and
+first-time launcher output are not copied into the application log file.
+
 ## Sidebar controls
 
 - **LLM backend:** selects the chat provider.
@@ -187,9 +230,12 @@ check before merge.
 
 ## Operating limits
 
-- Designed for a local, single-user Streamlit process.
-- OAuth opens on the computer running the Streamlit server.
+- Designed for one trusted user and one Streamlit server process, either locally or in
+  a private Docker Space.
+- Local OAuth opens on the server computer. In the private Space workflow, its temporary
+  sign-in URL is read from runtime logs.
 - Local Qdrant storage must not be shared by multiple app processes.
-- No automatic retry, timeout, provider fallback, cleanup, encryption, or remote
-  deployment workflow is implemented.
+- No automatic retry, provider fallback, retention cleanup, or encryption is implemented.
+- A private Hugging Face Docker deployment workflow is checked in, but the target Space
+  is not yet created. Public or multi-user deployment is unsupported.
 - Provider output and retrieval scores require human verification for important use.

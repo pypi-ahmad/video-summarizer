@@ -97,16 +97,18 @@ Streamlit reruns.
 The tradeoff is visible: restarting a browser session can restore a saved video and its
 vectors, but not its previous conversation or generated drafts.
 
-## Why the app targets one local process
+## Why the app targets one trusted process
 
 The job registry uses a process-local lock, and embedded Qdrant owns files beneath
-`runs/qdrant`. These choices are simple and appropriate for one local Streamlit process.
-They are not coordination mechanisms for several servers.
+`runs/qdrant`. These choices are simple and appropriate for one Streamlit process,
+whether it runs on a local computer or in the supported private Docker Space. They are
+not coordination mechanisms for several servers or users.
 
-A shared deployment would need an explicit authentication model, remote-safe Adversal
-OAuth, encrypted storage, retention rules, shared locking or a transactional job store,
-and Qdrant Server or Cloud. Adding those concerns now would complicate the local tool
-without satisfying its current contract.
+The hosted configuration mounts one private bucket at `/data` for runs, Adversal OAuth
+state, and rotating logs. It preserves the same single-process behavior across container
+restarts; it does not turn the application into a shared service. A public or multi-user
+deployment would still need application authentication, encrypted storage, retention
+rules, shared locking or a transactional job store, and Qdrant Server or Cloud.
 
 ## Long notes and bounded generation
 
@@ -130,9 +132,9 @@ There are three important boundaries:
 3. LLM output is assistance, not authoritative evidence. Prompts require grounding, but
    users still need to verify consequential claims.
 
-Local files and vectors are not encrypted and are retained until the user clears all
-runs. This is why the current application should remain local and avoid sensitive video
-on shared machines.
+Files and vectors are not encrypted and are retained until the user clears all runs.
+Keep the application local or private and single-user, and avoid sensitive video unless
+the underlying machine or bucket has an appropriate storage and retention policy.
 
 ## Where to go next
 

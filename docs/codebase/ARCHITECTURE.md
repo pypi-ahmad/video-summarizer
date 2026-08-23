@@ -6,7 +6,7 @@
 
 - Primary style: small layered Streamlit application with adapters around external services.
 - Classification: UI orchestration (`app.py`) calls workflow/persistence (`pipeline.py`), artifact/export logic (`artifacts.py`), feature renderers (`modes.py`), Qdrant storage (`vector_store.py`), and integration adapters.
-- Primary constraints: local single-user target; Streamlit reruns; multi-minute asynchronous Adversal jobs; file-backed resumability; fresh MCP subprocess per tool call.
+- Primary constraints: trusted single-user/single-process target; Streamlit reruns; multi-minute asynchronous Adversal jobs; file-backed resumability; fresh MCP subprocess per tool call; optional private Docker deployment with a persistent `/data` mount.
 
 ### 2) System Flow
 
@@ -37,6 +37,8 @@ Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED`
 | Vector store (`vector_store.py`) | Qdrant collection, indexing, payload filtering and retrieval | Chat generation or Streamlit UI | `vector_store.py` |
 | Adversal adapter (`adversal_client.py`) | MCP subprocess/session, tool calls, tool-error translation | Streamlit rendering | `adversal_client.py` |
 | LLM adapter (`llm.py`) | Environment-backed clients, model dispatch, embeddings | Job/session persistence | `llm.py` |
+| Observability (`observability.py`) | Rerun-safe terminal/file logging, rotation, levels, and secret redaction | User content or secret persistence | `observability.py` |
+| Container runtime (`Dockerfile`, `container-entrypoint.sh`) | Reproducible Space image and persistent path mapping | Multi-user coordination or application authentication | deployment files |
 
 ### 4) Reused Patterns
 
@@ -54,6 +56,7 @@ Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED`
 - `jobs.json` locking is process-local; multiple server processes would not share it.
 - Generated mode caches are session-local and disappear when the browser session ends.
 - Persistent Qdrant local mode supports this single process; multi-process deployment needs Qdrant Server or Cloud.
+- The private Docker target preserves state in one mounted bucket but does not isolate several users from each other.
 - The Windows `quality` workflow runs dependency sync, Ruff, ty, and pytest; non-Windows behavior is not covered by CI.
 
 ### 6) Evidence
@@ -66,5 +69,8 @@ Authentication branch: an Adversal response containing `AUTHENTICATION REQUIRED`
 - `vector_store.py`
 - `adversal_client.py`
 - `llm.py`
+- `observability.py`
+- `Dockerfile`
+- `container-entrypoint.sh`
 - `tests/test_regressions.py`
 - `.github/workflows/ci.yml`
