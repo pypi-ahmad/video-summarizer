@@ -1,18 +1,24 @@
 stateDiagram-v2
-    direction LR
-    [*] --> RUNNING: process_video returns request_id
-    RUNNING --> RUNNING: poll returns RUNNING or UNKNOWN
+    direction TB
+    [*] --> Idle
+    Idle --> RUNNING: process_video returns request_id
+    RUNNING --> RUNNING: status is RUNNING
     RUNNING --> AuthRequired: authentication required
-    AuthRequired --> RUNNING: OAuth completes and app reruns
-    RUNNING --> COMPLETED: poll returns COMPLETED
-    RUNNING --> FAILED: poll or Adversal error
-    COMPLETED --> Workspace: open saved artifacts
-    Workspace --> COMPLETED: resume same job later
-    FAILED --> [*]: start over
+    AuthRequired --> RUNNING: OAuth returns AUTHENTICATED
+    RUNNING --> COMPLETED: status is COMPLETED
+    RUNNING --> FAILED: FAILED / UNKNOWN / invalid response
+    FAILED --> RUNNING: retry status with same request_id
+    FAILED --> Idle: start over
+    COMPLETED --> Workspace: open durable artifacts
+    Workspace --> Idle: process another video
 
     note right of RUNNING
         Persisted in runs/jobs.json
         Polled every 8 seconds
+    end note
+    note right of FAILED
+        Error text remains visible
+        Retry never resubmits the video
     end note
     note right of COMPLETED
         notes.md and frames remain durable

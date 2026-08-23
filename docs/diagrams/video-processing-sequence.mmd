@@ -2,33 +2,31 @@ sequenceDiagram
     autonumber
     actor User
     participant App as Streamlit app
-    participant Pipeline
-    participant MCP as adversal-cli
+    participant Client as MCP worker
+    participant CLI as adversal-cli
     participant Backend as Adversal backend
 
-    User->>App: Upload video or submit URL
-    App->>Pipeline: submit_job(options)
-    Pipeline->>MCP: process_video(...)
-    MCP->>Backend: Start remote analysis
-    Backend-->>MCP: request_id
-    MCP-->>Pipeline: request_id
-    Pipeline-->>App: Persist RUNNING job
+    User->>App: Submit upload or URL + analysis controls
+    App->>Client: Queue process_video(...)
+    Client->>CLI: Call through persistent MCP session
+    CLI->>Backend: Upload and start remote analysis
+    Backend-->>CLI: request_id
+    CLI-->>Client: SUCCESS + request_id
+    Client-->>App: Parsed request_id
+    App->>App: Persist RUNNING job
 
     loop Every 8 seconds
-        App->>Pipeline: render_job_progress()
-        Pipeline->>MCP: check_video_status(request_id)
-        MCP->>Backend: Read status
-        Backend-->>Pipeline: RUNNING / COMPLETED / FAILED
+        CLI->>Backend: Background poll and artifact extraction
+        App->>Client: Queue check_video_status(request_id)
+        Client->>CLI: Reuse same MCP session
+        CLI-->>App: RUNNING / COMPLETED / FAILED / UNKNOWN
     end
 
-    alt Authentication required
-        Pipeline-->>App: Set auth_required
-        User->>App: Authenticate
-        App->>MCP: authenticate()
-    else Completed
-        Pipeline-->>App: Persist COMPLETED + artifacts
-        App-->>User: Notes, frames, Ask, Create
-    else Failed
-        Pipeline-->>App: Persist FAILED + error
-        App-->>User: Failure and start-over controls
+    opt Authentication required
+        App-->>User: Keep authentication banner active
+        User->>App: Complete browser OAuth
+        App->>Client: Queue authenticate()
+        Client->>CLI: Require AUTHENTICATED response
     end
+
+    App-->>User: Workspace, failure, or retry same request ID
