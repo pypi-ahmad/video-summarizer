@@ -1,0 +1,38 @@
+[project]
+name = "video-summarizer"
+version = "0.1.0"
+description = "Streamlit app for AI-assisted video summarization via Adversal"
+requires-python = ">=3.13"
+dependencies = [
+    "streamlit",
+    "mcp",
+    "adversal-cli",
+    "openai",
+    "numpy",
+    "torch",
+    "torchvision",
+    "google-genai>=2.19.0",
+    "python-dotenv>=1.2.3",
+]
+
+[dependency-groups]
+dev = ["ruff", "ty", "pytest"]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu132" }]
+torchvision = [{ index = "pytorch-cu132" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu132"
+url = "https://download.pytorch.org/whl/cu132"
+explicit = true
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = ["D", "COM812", "ISC001", "CPY001", "PLR0913"]
+
+[tool.ty.environment]
+python-version = "3.13"
