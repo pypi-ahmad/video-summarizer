@@ -20,6 +20,7 @@ Turn any video into study notes, a meeting digest, a searchable knowledge base, 
 - [Usage](#usage)
 - [Project structure](#project-structure)
 - [Known limitations](#known-limitations)
+- [Documentation](#documentation)
 - [Resources](#resources)
 
 ## Overview
@@ -73,7 +74,7 @@ Each call to Adversal (`process_video`, `check_video_status`, `check_remaining_q
 - [uv](https://docs.astral.sh/uv/) - manages the Python interpreter, virtual environment, and dependencies
 - `ffmpeg` / `ffprobe` on `PATH` - required by `adversal-cli` for local video inspection
 - An [Adversal](https://adversal.ai) account (free tier: 100 minutes/month) - sign-in happens via a browser popup on first use, no API key needed
-- At least one LLM provider key: [OpenAI](https://platform.openai.com/api-keys), [Agnes AI](https://www.agnes-ai.com), and/or [Google AI Studio](https://aistudio.google.com/apikey) for Gemini
+- A provider key for LLM-backed modes: [OpenAI](https://platform.openai.com/api-keys), [Agnes AI](https://www.agnes-ai.com), and/or [Google AI Studio](https://aistudio.google.com/apikey) for Gemini. Study notes need no LLM key.
 
 ## Getting started
 
@@ -111,14 +112,14 @@ Copy [`.env.example`](./.env.example) to `.env` and fill in whichever providers 
 ## Usage
 
 1. Pick a **mode** and an **LLM backend** in the sidebar.
-2. Provide a video: upload a file, or paste a public URL (downloaded via the bundled `yt-dlp`).
+2. Provide a video: upload a file, or paste a public URL (downloaded by `adversal-cli` through its bundled `yt-dlp` dependency).
 3. Click **Process video**. A status panel polls Adversal until the job completes.
 4. Read the result. Knowledge-base mode adds a chat box for follow-up questions; blog-post mode adds a Markdown download button.
 
 The sidebar also has:
 
 - **Quota** - check remaining Adversal minutes for the month
-- **Resume a previous job** - reattach to a job from an earlier session
+- **Resume a previous job** - reattach to one of the ten newest persisted jobs
 - **Danger zone** - clear all local run data (`runs/`)
 
 ## Project structure
@@ -133,14 +134,23 @@ video-summarizer/
 ├── launch.bat             # One-file first-run setup + launch
 ├── .env.example           # Required environment variables, documented
 ├── pyproject.toml         # uv-managed dependencies
+├── docs/
+│   ├── ARCHITECTURE.md    # Technical reference: modules, data flow, design decisions
+│   └── USAGE.md            # Step-by-step how-to guide for every mode
 └── runs/                  # Per-job output (gitignored): notes.md, images, jobs.json
 ```
 
 ## Known limitations
 
 - Adversal's OAuth sign-in opens a browser **on the machine running the Streamlit server**. Fine for local single-user use (the target for this project); not suited to a shared/remote deployment as-is.
-- One in-flight job per mode - starting a second job in the same mode overwrites the first.
+- One selected job per mode in each session. A completed mode has no separate **New job** action; its files and history remain until local runs are cleared.
 - Local run data (`runs/`) is never auto-deleted; use the sidebar's "Clear all runs" when needed.
+- Uploaded videos, generated notes, images, and indexes are stored unencrypted under `runs/`; avoid shared or remote deployment for sensitive content.
+
+## Documentation
+
+- [How to use the app](./docs/USAGE.md)
+- [Technical architecture](./docs/ARCHITECTURE.md)
 
 ## Resources
 
