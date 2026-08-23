@@ -69,6 +69,47 @@ def test_native_and_okf_exports_include_only_safe_agent_artifacts(tmp_path: Path
         assert "outside.jpg" not in names
 
 
+def test_download_filenames_use_safe_original_stem() -> None:
+    assert artifacts.download_filename("My Lecture.mp4", "blog_post", "md") == (
+        "My_Lecture_blog_post.md"
+    )
+    assert artifacts.download_filename("folder/Quarterly.demo.mov", "notes", "md") == (
+        "Quarterly_demo_notes.md"
+    )
+    assert artifacts.download_filename("محاضرة.mp4", "notes", "md") == "محاضرة_notes.md"
+    assert artifacts.download_filename("../?.mp4", "notes", "md") == "video_notes.md"
+
+
+def test_download_all_contains_core_and_cached_generated_outputs(tmp_path: Path) -> None:
+    (tmp_path / "notes.md").write_text("# Notes\n\nGrounded content", encoding="utf-8")
+    job = pipeline.Job(
+        mode="Source analysis",
+        request_id="request-1",
+        output_dir=str(tmp_path),
+        source_name="My Lecture.mp4",
+        status="COMPLETED",
+    )
+
+    bundle = artifacts.build_all_downloads_bundle(
+        job,
+        {"blog_post": "# Blog post", "meeting_summary": "# Meeting summary"},
+    )
+
+    with zipfile.ZipFile(io.BytesIO(bundle)) as archive:
+        assert set(archive.namelist()) == {
+            "My_Lecture_notes.md",
+            "My_Lecture_native_bundle.zip",
+            "My_Lecture_okf_0_2_bundle.zip",
+            "My_Lecture_blog_post.md",
+            "My_Lecture_meeting_summary.md",
+        }
+        assert archive.read("My_Lecture_blog_post.md") == b"# Blog post"
+        with zipfile.ZipFile(io.BytesIO(archive.read("My_Lecture_native_bundle.zip"))) as native:
+            assert native.namelist() == ["notes.md"]
+        with zipfile.ZipFile(io.BytesIO(archive.read("My_Lecture_okf_0_2_bundle.zip"))) as okf:
+            assert {"index.md", "video.md"} <= set(okf.namelist())
+
+
 def test_submit_job_persists_analysis_settings(tmp_path: Path, monkeypatch) -> None:
     calls = []
 
@@ -322,6 +363,26 @@ def test_generated_document_is_cached_per_job_and_backend(tmp_path: Path, monkey
     state["llm_option"] = "backend-b"
     assert generate() == "document-backend-b"
     assert len(calls) == 2
+
+
+def test_cached_generated_documents_are_scoped_to_job_and_backend(monkeypatch) -> None:
+    state = {
+        "meeting_digests": {
+            ("active-job", "backend-a"): "active meeting",
+            ("other-job", "backend-a"): "other meeting",
+        },
+        "blog_drafts": {
+            ("active-job", "backend-a"): "active blog",
+            ("active-job", "backend-b"): "other backend blog",
+        },
+    }
+    monkeypatch.setattr(modes.st, "session_state", state)
+    job = pipeline.Job(mode="Source analysis", request_id="active-job", output_dir="unused")
+
+    assert modes.cached_generated_documents(job, "backend-a") == {
+        "meeting_summary": "active meeting",
+        "blog_post": "active blog",
+    }
 
 
 def test_long_notes_are_reduced_in_bounded_batches(monkeypatch) -> None:

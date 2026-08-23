@@ -227,21 +227,21 @@ def render_notes(job: Job) -> None:
         st.download_button(
             "Download Markdown",
             notes,
-            file_name=job.file_name,
+            file_name=artifacts.download_filename(job.source_name, "notes", "md"),
             mime="text/markdown",
             icon=":material/download:",
         )
         st.download_button(
             "Download native bundle",
             artifacts.build_native_bundle(job),
-            file_name=f"{slugify(job.source_name)}-adversal.zip",
+            file_name=artifacts.download_filename(job.source_name, "native_bundle", "zip"),
             mime="application/zip",
             icon=":material/archive:",
         )
         st.download_button(
             "Download OKF 0.2 bundle",
             artifacts.build_okf_bundle(job),
-            file_name=f"{slugify(job.source_name)}-okf.zip",
+            file_name=artifacts.download_filename(job.source_name, "okf_0_2_bundle", "zip"),
             mime="application/zip",
             icon=":material/account_tree:",
         )
@@ -281,6 +281,7 @@ def render_create(job: Job) -> None:
 def render_workspace(job: Job) -> None:
     with st.container(horizontal=True, horizontal_alignment="distribute"):
         st.subheader(job.source_name)
+        download_slot = st.empty()
         if st.button("Process another video", icon=":material/add:"):
             logger.info("workspace.closed request_id=%s", job.request_id)
             st.session_state.active_job = None
@@ -302,6 +303,19 @@ def render_workspace(job: Job) -> None:
         modes.render_knowledge_base(job)
     else:
         render_create(job)
+
+    option_key = st.session_state.llm_option
+    generated_documents = modes.cached_generated_documents(job, option_key)
+    with download_slot:
+        st.download_button(
+            "Download all",
+            lambda: artifacts.build_all_downloads_bundle(job, generated_documents),
+            file_name=artifacts.download_filename(job.source_name, "all_downloads", "zip"),
+            mime="application/zip",
+            key=f"download-all-{job.request_id}-{option_key}-{len(generated_documents)}",
+            on_click="ignore",
+            icon=":material/folder_zip:",
+        )
 
 
 def main() -> None:

@@ -17,6 +17,15 @@ from pipeline import Job
 FRAME_TS_RE = re.compile(r"frame_(\d{2})_(\d{2})-")
 LONG_NOTES_THRESHOLD = 50_000
 REDUCTION_BATCH_CHARS = 30_000
+GENERATED_DOCUMENT_CACHES = {
+    "meeting_digests": "meeting_summary",
+    "triage_digests": "content_triage",
+    "blog_drafts": "blog_post",
+    "quiz_flashcard_packs": "quiz_flashcards",
+    "sop_guides": "sop_guide",
+    "interview_insight_packs": "interview_insights",
+    "faq_articles": "faq_article",
+}
 
 logger = observability.get_logger("modes")
 
@@ -194,12 +203,23 @@ def _cached_document(
     return cache[key]
 
 
+def cached_generated_documents(job: Job, option_key: str) -> dict[str, str]:
+    """Return generated documents already cached for one job and backend."""
+    key = (job.request_id, option_key)
+    documents = {}
+    for cache_name, download_type in GENERATED_DOCUMENT_CACHES.items():
+        cache = st.session_state.get(cache_name, {})
+        if key in cache:
+            documents[download_type] = cache[key]
+    return documents
+
+
 def _render_generated_document(
     job: Job,
     *,
     cache_name: str,
     heading: str,
-    file_name: str,
+    download_type: str,
     system: str,
     reduction_goal: str,
     preserve_images: bool = False,
@@ -214,7 +234,12 @@ def _render_generated_document(
             preserve_images=preserve_images,
         )
     pipeline.render_markdown_with_images(document, job.output_path)
-    st.download_button("Download as Markdown", document, file_name=file_name)
+    st.download_button(
+        "Download as Markdown",
+        document,
+        file_name=artifacts.download_filename(job.source_name, download_type, "md"),
+        mime="text/markdown",
+    )
     with st.expander("Source notes"):
         pipeline.render_markdown_with_images(pipeline.load_completed_notes(job), job.output_path)
 
@@ -229,7 +254,7 @@ def render_meeting_summary(job: Job) -> None:
         job,
         cache_name="meeting_digests",
         heading="Action items and decisions",
-        file_name="meeting_summary.md",
+        download_type="meeting_summary",
         reduction_goal="extract meeting decisions and action items",
         system=(
             "Extract a compact digest from these meeting notes. "
@@ -244,7 +269,7 @@ def render_triage(job: Job) -> None:
         job,
         cache_name="triage_digests",
         heading="Content triage",
-        file_name="content_triage.md",
+        download_type="content_triage",
         reduction_goal="decide whether a reviewer should watch, skim, or skip the video",
         system=(
             "You help a reviewer decide whether to watch a long video. "
@@ -259,7 +284,7 @@ def render_blog_post(job: Job) -> None:
         job,
         cache_name="blog_drafts",
         heading="Blog post",
-        file_name="blog_post.md",
+        download_type="blog_post",
         reduction_goal="create a grounded blog post that preserves useful screenshots",
         preserve_images=True,
         system=(
@@ -333,7 +358,7 @@ def render_quiz_and_flashcards(job: Job) -> None:
         job,
         cache_name="quiz_flashcard_packs",
         heading="Quiz and flashcards",
-        file_name="quiz_flashcards.md",
+        download_type="quiz_flashcards",
         reduction_goal="create a grounded quiz, answer key, and flashcard study pack",
         system=(
             "Create a study pack using only these video notes. Include exactly 10 quiz "
@@ -351,7 +376,7 @@ def render_sop_guide(job: Job) -> None:
         job,
         cache_name="sop_guides",
         heading="SOP/how-to guide",
-        file_name="sop_guide.md",
+        download_type="sop_guide",
         reduction_goal="create an actionable SOP with relevant screenshots",
         preserve_images=True,
         system=(
@@ -370,7 +395,7 @@ def render_interview_insights(job: Job) -> None:
         job,
         cache_name="interview_insight_packs",
         heading="Interview insight pack",
-        file_name="interview_insights.md",
+        download_type="interview_insights",
         reduction_goal="extract grounded interview themes, answers, and follow-up questions",
         system=(
             "Create an interview insight pack using only these video notes. Include an "
@@ -387,7 +412,7 @@ def render_faq_article(job: Job) -> None:
         job,
         cache_name="faq_articles",
         heading="FAQ/help-center article",
-        file_name="faq_article.md",
+        download_type="faq_article",
         reduction_goal="create a grounded FAQ and help-center article",
         preserve_images=True,
         system=(

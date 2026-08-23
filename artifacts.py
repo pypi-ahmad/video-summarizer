@@ -8,6 +8,7 @@ import re
 import zipfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import observability
@@ -17,7 +18,7 @@ from pipeline import Job
 logger = observability.get_logger("artifacts")
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    from collections.abc import Mapping
 
 CHAPTER_SPLIT_RE = re.compile(r"\n\s*\*\s*\*\s*\*\s*\n")
 HEADING_RE = re.compile(r"^(#{1,3})\s+(.*)$", re.MULTILINE)
@@ -79,6 +80,16 @@ def _zip_bytes(files: list[tuple[str, bytes]]) -> bytes:
     return output.getvalue()
 
 
+def download_filename(source_name: str, download_type: str, extension: str) -> str:
+    """Build a portable download name from the original video name."""
+    original_name = Path(source_name.replace("\\", "/")).name
+    original_stem = Path(original_name).stem
+    safe_stem = re.sub(r"[^\w]+", "_", original_stem).strip("_") or "video"
+    safe_type = re.sub(r"[^a-z0-9]+", "_", download_type.lower()).strip("_") or "download"
+    safe_extension = re.sub(r"[^a-z0-9]+", "", extension.lower()) or "bin"
+    return f"{safe_stem}_{safe_type}.{safe_extension}"
+
+
 def build_native_bundle(job: Job) -> bytes:
     notes = pipeline.load_completed_notes(job)
     files = [(job.file_name, notes.encode())]
@@ -90,6 +101,35 @@ def build_native_bundle(job: Job) -> bytes:
     logger.info(
         "native_bundle.completed request_id=%s files=%s bytes=%s",
         job.request_id,
+        len(files),
+        len(bundle),
+    )
+    return bundle
+
+
+def build_all_downloads_bundle(job: Job, generated_documents: Mapping[str, str]) -> bytes:
+    """Package existing downloads without generating additional documents."""
+    notes = pipeline.load_completed_notes(job)
+    files = [
+        (download_filename(job.source_name, "notes", "md"), notes.encode()),
+        (
+            download_filename(job.source_name, "native_bundle", "zip"),
+            build_native_bundle(job),
+        ),
+        (
+            download_filename(job.source_name, "okf_0_2_bundle", "zip"),
+            build_okf_bundle(job),
+        ),
+    ]
+    files.extend(
+        (download_filename(job.source_name, download_type, "md"), document.encode())
+        for download_type, document in generated_documents.items()
+    )
+    bundle = _zip_bytes(files)
+    logger.info(
+        "all_downloads_bundle.completed request_id=%s generated=%s files=%s bytes=%s",
+        job.request_id,
+        len(generated_documents),
         len(files),
         len(bundle),
     )
