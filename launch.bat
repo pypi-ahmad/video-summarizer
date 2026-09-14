@@ -1,4 +1,8 @@
 @echo off
+@rem Minimal Windows local launcher for Video Summarizer.
+@rem Responsible for quick startup when uv is already installed globally.
+@rem Must not attempt self-bootstrapping installation of uv or Python.
+@rem Next: launch.cmd (for full self-bootstrapping) or app.py (the main application).
 setlocal
 cd /d "%~dp0"
 
