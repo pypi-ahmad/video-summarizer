@@ -1,4 +1,10 @@
-"""Rerun-safe, metadata-only application logging."""
+"""Rerun-safe, metadata-only application logging.
+
+Responsible for the process-wide rotating file and console loggers, structured
+event formatting, and secret/key redaction. Must not log prompts, video notes,
+or raw exception messages. Next: app.py, which initializes logging at startup
+via configure_logging().
+"""
 
 from __future__ import annotations
 
@@ -36,6 +42,10 @@ _TOKEN_PATTERNS = (
 )
 
 
+# Log messages are metadata-only by convention (see module docstring), but
+# this is the actual enforcement: strip configured secret values and common
+# API-key token shapes, then collapse newlines and cap length so one bad
+# message can't inject fake log lines or blow up the log file.
 def _redact(message: str) -> str:
     redacted = message
     for name in SECRET_ENV_NAMES:
@@ -79,6 +89,10 @@ def configure_logging(
     with _CONFIGURE_LOCK:
         logger.setLevel(resolved_level)
         logger.propagate = False
+        # Streamlit reruns this code on every interaction; without this
+        # marker + early return, each rerun would attach another pair of
+        # handlers and every log line would be duplicated once per rerun so
+        # far.
         existing = [handler for handler in logger.handlers if _managed(handler)]
         if existing:
             for handler in existing:
@@ -134,6 +148,9 @@ def get_logger(component: str) -> logging.Logger:
     return logging.getLogger(f"{LOGGER_NAME}.{component}")
 
 
+# Security and privacy boundary: logs the event name and exception class type,
+# omitting exception strings and prompt contents to prevent leaking sensitive
+# transcript or user data into log files. Full tracebacks are restricted to DEBUG.
 def log_failure(
     logger: logging.Logger,
     event: str,

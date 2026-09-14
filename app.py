@@ -1,4 +1,10 @@
-"""Streamlit entry point for the process-once video workspace."""
+"""Streamlit entry point for the process-once video workspace.
+
+Owns page routing and widget/session-state wiring only; delegates all
+Adversal, LLM, and Qdrant calls to adversal_client/llm/vector_store via
+pipeline.py and modes.py so retries, caching, and safety checks stay
+centralized. Next: pipeline.py for the submit/poll/render flow.
+"""
 
 from __future__ import annotations
 
@@ -41,6 +47,10 @@ def slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40] or "video"
 
 
+# Streamlit hands us the browser-supplied filename verbatim (untrusted):
+# strip any path component and confirm the resolved destination still sits
+# inside job_dir before writing, so a crafted name like "../../x" can't
+# escape the job's own directory.
 def _safe_upload_path(job_dir: Path, filename: str) -> Path:
     name = Path(filename.replace("\\", "/")).name
     if not name:
@@ -63,6 +73,10 @@ def _parse_timestamps(value: str) -> list[str]:
     return [part.strip() for part in re.split(r"[,\n]", value) if part.strip()]
 
 
+# Runtime environment boundary: on local desktop, OAuth opens a local browser tab.
+# In headless container deployments like private Hugging Face Spaces (SPACE_ID set),
+# browser auto-open is unavailable, so the user must retrieve the temporary OAuth URL
+# from the container runtime logs.
 def render_auth_banner_if_needed() -> bool:
     if not st.session_state.get("auth_required"):
         return False
@@ -125,6 +139,10 @@ def render_clear_runs() -> None:
         confirm = st.checkbox("I understand this deletes all local run data")
         if st.button("Clear all runs", disabled=not confirm):
             logger.warning("runs.clear_started")
+            # Qdrant's local mode holds an OS-level file lock under
+            # runs/qdrant; it must be released before the tree can be
+            # removed (rmtree fails on Windows otherwise). This permanently
+            # deletes uploads, jobs, notes, frames, and vectors with no undo.
             try:
                 vector_store.close_local_store()
                 shutil.rmtree(pipeline.RUNS_DIR, ignore_errors=False)
@@ -373,6 +391,9 @@ def main() -> None:
     render_resume_picker()
     render_clear_runs()
 
+    # A job moves through one linear state machine: no job -> RUNNING ->
+    # FAILED or COMPLETED. The trailing `else` below means COMPLETED, the
+    # only state that reaches the full workspace view.
     job: Job | None = st.session_state.active_job
     if job is None:
         render_submit_form()
