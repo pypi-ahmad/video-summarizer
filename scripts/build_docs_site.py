@@ -1,8 +1,10 @@
 """Build the self-contained offline documentation website.
 
-The generated site deliberately has no runtime dependency. It embeds the
-repository's tracked Markdown files as hash-routed pages, so opening
-``docs/site.html`` directly from a file browser works without a web server.
+Responsible for compiling the repository's tracked Markdown documentation into a
+single, zero-dependency offline HTML bundle (docs/site.html) with hash routing.
+Must not depend on external Markdown parsers or third-party web frameworks, and
+must not be imported by the runtime application.
+Next: docs/site.html (the generated artifact) or app.py for the main application.
 """
 
 # The generated HTML template intentionally keeps related CSS and markup together.
@@ -48,6 +50,9 @@ class Document:
     content_html: str = ""
 
 
+# Discovery boundary: queries git ls-files to include only version-controlled Markdown
+# files. If git is unavailable or the directory is not a repository, falls back to a
+# direct directory walk over README.md and docs/**/*.md.
 def tracked_markdown() -> list[Path]:
     """Return Markdown files tracked by Git, with a safe local fallback."""
 
