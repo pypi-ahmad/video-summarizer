@@ -1,4 +1,9 @@
 @echo off
+@rem Self-bootstrapping Windows launcher for Video Summarizer.
+@rem Responsible for installing uv if missing, pinning Python 3.13.13, syncing locked
+@rem dependencies, checking media tools (ffmpeg/ffprobe), and running the Streamlit app.
+@rem Must not modify tracked repository files or run unpinned Python versions.
+@rem Next: app.py for the Streamlit UI application entry point.
 setlocal EnableExtensions
 cd /d "%~dp0"
 
@@ -39,6 +44,8 @@ if not exist ".env" if exist ".env.example" (
     echo Created .env from .env.example - fill only keys missing from your user environment.
 )
 
+@rem External tool dependency boundary: checks presence of ffmpeg and ffprobe.
+@rem Local video processing and frame extraction require ffmpeg on system PATH.
 where ffmpeg >nul 2>nul
 if errorlevel 1 echo Warning: ffmpeg is not on PATH; local video processing may fail.
 where ffprobe >nul 2>nul

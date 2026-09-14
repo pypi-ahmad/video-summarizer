@@ -1,9 +1,17 @@
+# Container image specification for Video Summarizer.
+# Responsible for defining the reproducible runtime container for Hugging Face Spaces
+# and Docker deployments, bundling Python 3.13, uv, ffmpeg, and application dependencies.
+# Must not execute as root (UID 1000 required for Hugging Face Space security sandbox).
+# Next: container-entrypoint.sh for runtime volume initialization.
+
 FROM ghcr.io/astral-sh/uv:0.12.5 AS uv
 
 FROM python:3.13-slim-trixie
 
 ARG DEBIAN_FRONTEND=noninteractive
 
+# Security and storage boundary: creates non-root user (UID 1000) required by
+# Hugging Face Spaces, and prepares /data mount point for persistent NVMe storage.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
     && rm -rf /var/lib/apt/lists/* \

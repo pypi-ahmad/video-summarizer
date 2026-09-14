@@ -1,3 +1,8 @@
+# CI workflow definition for Video Summarizer.
+# Responsible for running quality gates (linting, docs site sync check, type checking, unit tests)
+# on Windows runner matching target deployment.
+# Must not mutate repository state or deploy artifacts.
+# Next: pyproject.toml for tool configuration or scripts/build_docs_site.py.
 name: CI
 
 on:
