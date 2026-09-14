@@ -1,4 +1,10 @@
-"""Persistent, typed wrapper around the adversal-cli MCP stdio server."""
+"""Persistent, typed wrapper around the adversal-cli MCP stdio server.
+
+Owns the one long-lived MCP subprocess/session and turns its free-text tool
+responses into typed results or exceptions. Must not be bypassed by other
+modules reaching for the MCP session directly. Next: pipeline.py, which
+drives process_video/check_video_status into a persisted Job.
+"""
 
 from __future__ import annotations
 
@@ -26,6 +32,11 @@ VideoStatus = Literal["COMPLETED", "FAILED", "RUNNING", "UNKNOWN"]
 
 logger = observability.get_logger("adversal")
 
+# adversal-cli's tool responses are free text, not a typed schema, so results
+# are recovered with regexes and substring checks (e.g. "AUTHENTICATION
+# REQUIRED" in _call_tool below) rather than structured fields. These are
+# coupled to adversal-cli's exact current wording and can silently stop
+# matching if it changes.
 REQUEST_ID_RE = re.compile(r'request[_ ]?id["\':\s]+([\w-]+)', re.IGNORECASE)
 STATUS_RE = re.compile(r"^\s*(COMPLETED|FAILED|RUNNING|UNKNOWN)\b", re.IGNORECASE)
 
@@ -63,7 +74,15 @@ def _server_params() -> StdioServerParameters:
 
 
 class _MCPConnection:
-    """One MCP subprocess and session, reused for the life of this app process."""
+    """One MCP subprocess and session, reused for the life of this app process.
+
+    The MCP ClientSession and its asyncio event loop may only be touched from
+    the thread that created them, but Streamlit calls into this module from
+    whichever thread is handling a given rerun. A dedicated daemon thread
+    owns the asyncio loop and session; every caller instead puts a _ToolCall
+    on `_requests` and blocks on its Future, so calls are serialized onto
+    that one session regardless of which thread submitted them.
+    """
 
     def __init__(self) -> None:
         self._requests: Queue[_ToolCall | None] = Queue()
@@ -133,6 +152,9 @@ atexit.register(_close_connection)
 
 
 def _response_text(result: CallToolResult) -> str:
+    # adversal-cli returns its answer as either plain TextContent or (on some
+    # tool calls) a structuredContent payload; fall back through both shapes
+    # instead of assuming one, since every caller here just wants a string.
     text = "\n".join(
         content.text for content in result.content if isinstance(content, TextContent)
     ).strip()
@@ -161,6 +183,11 @@ def _call_tool(tool_name: str, arguments: dict[str, Any]) -> str:
     except AdversalError:
         raise
     except Exception as exc:
+        # Any non-AdversalError failure here means the transport itself is
+        # suspect (subprocess died, pipe broke, etc.), not just this one
+        # call. Tear down the shared connection so the *next* call opens a
+        # fresh subprocess instead of reusing one that may be half-dead;
+        # this does not resubmit the video, so the caller must retry.
         with _connection_lock:
             if connection is not None and _connection is connection:
                 _connection = None
@@ -208,6 +235,11 @@ def _require_response(text: str, success_pattern: re.Pattern[str]) -> re.Match[s
     return match
 
 
+# Submits an asynchronous video processing job to adversal-cli.
+# Invariant: exactly one of video_path or video_url must be provided.
+# output_path is the host directory where the subprocess directly writes notes.md
+# and extracted frame images. start_time/end_time accept seconds, "MM:SS", or
+# "HH:MM:SS". Returns the remote request_id immediately without waiting for completion.
 def process_video(
     *,
     video_path: str | None = None,
@@ -238,6 +270,9 @@ def process_video(
     return _require_response(text, REQUEST_ID_RE).group(1)
 
 
+# Polling boundary: adversal-cli writes status to stdout as free text.
+# UNKNOWN is treated as a terminal failure alongside FAILED because the MCP
+# session cannot track lost or unrecoverable request IDs.
 def check_video_status(request_id: str) -> StatusResult:
     text = _call_tool("check_video_status", {"request_id": request_id})
     status = _require_response(text, STATUS_RE).group(1).upper()

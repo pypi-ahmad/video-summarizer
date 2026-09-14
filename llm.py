@@ -1,10 +1,10 @@
 """Multi-provider LLM wrapper for the post-processing steps Adversal itself doesn't do.
 
-Reads API keys/base URLs directly from the environment (never logged). On
-this machine they're already set as system env vars; python-dotenv also
-loads a local .env if present, but never overrides an already-set env var,
-so other users can copy .env.example to .env on their own machine without
-affecting this one.
+Responsible for dispatching chat completions (OpenAI, Agnes AI, Google Gemini)
+and text embeddings (OpenAI text-embedding-3-small). Reads API keys from the
+environment without logging secrets. Must not invoke the Adversal MCP server or
+parse video notes directly — callers prepare prompts and parse completions.
+Next: modes.py for how prompts and document generation are structured.
 """
 
 from __future__ import annotations
@@ -80,6 +80,8 @@ def _openai_client() -> OpenAI:
 
 
 def _agnes_client() -> OpenAI:
+    # Agnes AI exposes an OpenAI-compatible chat API, so the OpenAI SDK is
+    # reused here pointed at Agnes's base URL rather than a separate client.
     return OpenAI(api_key=_require_env("AGNES_API_KEY"), base_url=AGNES_BASE_URL)
 
 
@@ -89,6 +91,8 @@ def _image_data_url(image: ImageInput) -> str:
     return f"data:{mime_type};base64,{encoded}"
 
 
+# Wire format boundary: formats images as base64 data URLs with high detail
+# matching OpenAI's multi-modal chat completions message schema.
 def _openai_user_content(user: str, images: Sequence[ImageInput]) -> str | list[dict[str, Any]]:
     if not images:
         return user
@@ -111,7 +115,7 @@ def _chat_openai(
 ) -> str:
     response = _openai_client().chat.completions.create(
         model=model,
-        reasoning_effort="medium",
+        reasoning_effort="medium",  # fixed; not exposed as a user setting
         messages=cast("Any", [
             {"role": "system", "content": system},
             {"role": "user", "content": _openai_user_content(user, images)},
@@ -151,6 +155,7 @@ def _chat_gemini(
         contents=cast("Any", contents),
         config=genai_types.GenerateContentConfig(
             system_instruction=system,
+            # Fixed thinking level; not exposed as a user setting.
             thinking_config=genai_types.ThinkingConfig(
                 thinking_level=genai_types.ThinkingLevel.MEDIUM
             ),
@@ -159,6 +164,8 @@ def _chat_gemini(
     return response.text or ""
 
 
+# Single fan-out point for every provider; chat() below picks a function by
+# provider string instead of branching per call site.
 _DISPATCH = {"openai": _chat_openai, "agnes": _chat_agnes, "gemini": _chat_gemini}
 
 
@@ -204,6 +211,9 @@ def chat(
     return result
 
 
+# Security prompt boundary: explicitly instructs vision models to treat legible
+# text inside frames as untrusted content, preventing adversarial prompt injections
+# embedded in video slides or screens from executing as instructions.
 def describe_image(image: ImageInput, *, context: str, option_key: str) -> str:
     """Create a compact retrieval description without following text inside the image."""
     return chat(

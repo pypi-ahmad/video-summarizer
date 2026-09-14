@@ -1,4 +1,11 @@
-"""Mode configs + thin per-mode renderers built on the shared pipeline."""
+"""Mode configs + thin per-mode renderers built on the shared pipeline.
+
+Owns chunking, retrieval-augmented prompting, long-note reduction, and
+per-workflow caching for Ask and the seven Create documents. Must not touch
+Adversal directly — video content only reaches here through
+pipeline.load_completed_notes. Next: llm.py for how a chat call is actually
+dispatched.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +25,10 @@ from pipeline import Job
 FRAME_TS_RE = re.compile(r"frame_(\d{2})_(\d{2})-")
 LONG_NOTES_THRESHOLD = 50_000
 REDUCTION_BATCH_CHARS = 30_000
+# Maps each Create workflow's st.session_state cache key to the download
+# type used for its filename (see artifacts.download_filename). Every entry
+# here must match a cache_name passed to _render_generated_document below,
+# or cached_generated_documents will silently miss that workflow.
 GENERATED_DOCUMENT_CACHES = {
     "meeting_digests": "meeting_summary",
     "triage_digests": "content_triage",
@@ -38,6 +49,8 @@ class Chunk:
     timestamp: str | None
 
 
+# Chunking boundary: splits Markdown into paragraph-aligned chunks capped at
+# max_chars, preserving section headings and extracting timestamps from frame names.
 def split_notes_into_chunks(md_text: str, max_chars: int = 1500) -> list[Chunk]:
     """Chunk on Adversal's own chapter separator and headings, not a generic splitter."""
     chunks: list[Chunk] = []
@@ -70,6 +83,8 @@ def build_or_load_kb_index(job: Job) -> list[Chunk]:
     return chunks
 
 
+# Retrieval boundary: fetches top 5 text chunks and top 3 visual frame descriptions
+# for the active job's single vector collection.
 def search_kb(
     query: str, job: Job
 ) -> tuple[list[vector_store.SearchHit], list[vector_store.SearchHit]]:
@@ -171,6 +186,9 @@ def _reduce_notes(notes: str, goal: str, *, preserve_images: bool) -> str:
             len(reduced),
         )
         if len(reduced) >= len(source):
+            # Guard against an infinite loop: if a round didn't actually
+            # shrink the text (e.g. the model expanded rather than
+            # condensed it), stop here instead of retrying forever.
             return reduced
         source = reduced
     return source
@@ -188,6 +206,10 @@ def _cached_document(
     evidence = _active_evidence(job)
     current_evidence_hash = visual_evidence.evidence_hash(evidence)
     cache = st.session_state.setdefault(cache_name, {})
+    # Keying on evidence_hash (not just job + backend) means turning the
+    # visual index on/off, or finishing more of it, invalidates the cached
+    # document instead of silently reusing a stale text-only or partially
+    # illustrated version.
     key = (job.request_id, option_key, current_evidence_hash)
     if key not in cache:
         logger.info(
@@ -263,6 +285,10 @@ def cached_generated_documents(job: Job, option_key: str) -> dict[str, str]:
         cache = st.session_state.get(cache_name, {})
         if key in cache:
             documents[download_type] = cache[key]
+        # Older entries were cached before visual evidence existed (or with
+        # it disabled), keyed on just (request_id, backend); fall back to
+        # that 2-tuple so a text-only generation from earlier in the session
+        # still counts as "already cached" for Download all.
         elif key[2] == "text-only" and key[:2] in cache:
             documents[download_type] = cache[key[:2]]
     return documents

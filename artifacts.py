@@ -1,4 +1,10 @@
-"""Read, package, and export the artifacts produced by Adversal."""
+"""Read, package, and export the artifacts produced by Adversal.
+
+Owns Markdown chapter-splitting, safe local-image discovery, and the
+Markdown/native/OKF zip exports. Must not fetch or regenerate content — it
+only repackages what pipeline.py already has on disk. Next: visual_evidence.py,
+which layers frame descriptions on top of these same images.
+"""
 
 from __future__ import annotations
 
@@ -38,6 +44,8 @@ class Section:
     markdown: str
 
 
+# Adversal artifact convention: notes.md separates video chapters with
+# Markdown horizontal rules ("* * *"). Headings (# to ###) provide section titles.
 def split_sections(markdown_text: str) -> list[Section]:
     sections = []
     for raw_section in CHAPTER_SPLIT_RE.split(markdown_text):
@@ -80,6 +88,8 @@ def _zip_bytes(files: list[tuple[str, bytes]]) -> bytes:
     return output.getvalue()
 
 
+# Cross-platform filename boundary: strips path delimiters and replaces characters
+# invalid in Windows and POSIX filesystems with underscores.
 def download_filename(source_name: str, download_type: str, extension: str) -> str:
     """Build a portable download name from the original video name."""
     original_name = Path(source_name.replace("\\", "/")).name
@@ -166,6 +176,11 @@ def _rewrite_image_paths(markdown_text: str, images: list[LocalImage]) -> str:
 
 
 def build_okf_bundle(job: Job) -> bytes:
+    # OKF ("Open Knowledge Format") 0.2 bundle: a top-level index.md, one
+    # video.md concept with YAML frontmatter, one Markdown file per chapter
+    # under chapters/ (also with frontmatter), and referenced images copied
+    # under assets/. The frontmatter keys and this layout are the contract
+    # that makes the zip importable by OKF-aware agents/catalogs.
     notes = pipeline.load_completed_notes(job)
     sections = split_sections(notes)
     images = find_local_images(notes, job.output_path)

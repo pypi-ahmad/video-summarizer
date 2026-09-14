@@ -1,4 +1,11 @@
-"""Durable, path-safe visual descriptions for Adversal frames."""
+"""Durable, path-safe visual descriptions for Adversal frames.
+
+Owns the on-disk visual-evidence.json manifest: discovering frames,
+captioning them via llm.describe_image, and safely resolving them again
+before use. Must not send a frame to a provider without re-validating its
+path stays inside the job directory. Next: vector_store.py, which embeds
+these captions alongside text chunks.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +26,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 MANIFEST_NAME = "visual-evidence.json"
+# load_evidence() below discards the whole manifest if this doesn't match,
+# so bump it whenever the on-disk shape of a frame record changes — that is
+# the mechanism that forces existing jobs to rebuild their visual index.
 MANIFEST_VERSION = 1
 KEY_FRAME_TS_RE = re.compile(r"frame_(\d{2})_(\d{2})-")
 REQUESTED_FRAME_TS_RE = re.compile(r"-(\d+)ms$")
@@ -61,6 +71,8 @@ def _key_frame_timestamp(markdown: str) -> str | None:
     return f"{match.group(1)}:{match.group(2)}" if match else None
 
 
+# Adversal requested frame convention: files end with -<milliseconds>ms.
+# Unit conversion: converts integer milliseconds to "HH:MM:SS" or "MM:SS".
 def _requested_frame_timestamp(path: Path) -> str | None:
     match = REQUESTED_FRAME_TS_RE.search(path.stem)
     if not match:
@@ -120,6 +132,9 @@ def _manifest_path(job: Job) -> Path:
     return job.output_path / MANIFEST_NAME
 
 
+# Validation and security boundary: rejects manifests with mismatched version,
+# verifies that referenced frame files remain strictly inside job.output_path, and
+# discards records if the on-disk image SHA-256 hash has changed since captioning.
 def load_evidence(job: Job) -> list[FrameEvidence]:
     """Load valid current evidence and silently discard stale or unsafe records."""
     manifest_path = _manifest_path(job)
@@ -161,6 +176,8 @@ def load_evidence(job: Job) -> list[FrameEvidence]:
     return evidence
 
 
+# Atomic write boundary: writes JSON payload to a temporary file before renaming
+# over the destination to prevent manifest corruption on process interruption.
 def _save_evidence(job: Job, evidence: list[FrameEvidence]) -> None:
     manifest_path = _manifest_path(job)
     payload = {
@@ -233,6 +250,9 @@ def build_evidence(
 
 
 def evidence_hash(evidence: list[FrameEvidence]) -> str:
+    # "text-only" is a real sentinel value, not just a placeholder: modes.py
+    # matches on this exact string to recognize cache entries generated
+    # without any visual evidence.
     if not evidence:
         return "text-only"
     stable = [
@@ -243,7 +263,12 @@ def evidence_hash(evidence: list[FrameEvidence]) -> str:
 
 
 def image_inputs(job: Job, evidence: list[FrameEvidence]) -> list[llm.ImageInput]:
-    """Resolve persisted relative paths again before sending pixels to a provider."""
+    """Resolve persisted relative paths again before sending pixels to a provider.
+
+    Re-resolving (instead of trusting the stored relative_path) re-applies
+    the same containment check as pipeline._resolve_local_image, in case the
+    manifest was hand-edited or came from an older format.
+    """
     inputs = []
     for index, item in enumerate(evidence, start=1):
         path = pipeline._resolve_local_image(job.output_path, item.relative_path)  # noqa: SLF001

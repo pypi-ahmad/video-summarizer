@@ -1,4 +1,9 @@
-"""Shared submit -> poll -> read-results pipeline used by all output modes."""
+"""Shared submit -> poll -> read-results pipeline used by all output modes.
+
+Owns Job persistence (runs/jobs.json) and safe local access to a job's notes
+and images. Must not know about specific output workflows — see modes.py for
+those. Next: adversal_client.py for what a Job's request_id points at.
+"""
 
 from __future__ import annotations
 
@@ -60,6 +65,11 @@ def _load_all_jobs() -> dict[str, dict]:
 
 
 def _save_job(job: Job) -> None:
+    # Read-modify-write the whole jobs.json under one lock, then swap it in
+    # with an atomic rename so a crash mid-write can't corrupt the file or
+    # leave a half-written record. JOBS_LOCK only serializes threads inside
+    # this one process; a second process writing jobs.json concurrently is
+    # not guarded against (see README's known limitations).
     with JOBS_LOCK:
         RUNS_DIR.mkdir(parents=True, exist_ok=True)
         all_jobs = _load_all_jobs()
@@ -122,6 +132,9 @@ def submit_job(
     return job
 
 
+# Streamlit reruns just this fragment every POLL_INTERVAL_SECONDS instead of
+# the whole page, so the rest of the UI stays responsive while a job is
+# still RUNNING. It stops firing once the job leaves that state.
 @st.fragment(run_every=POLL_INTERVAL_SECONDS)
 def render_job_progress() -> None:
     job: Job | None = st.session_state.get("active_job")
@@ -169,6 +182,10 @@ def load_completed_notes(job: Job) -> str:
 
 
 def _resolve_local_image(base_dir: Path, src: str) -> Path | None:
+    # `src` comes from Markdown that Adversal (a remote service) wrote to
+    # disk — treat it as untrusted. Resolve it and confirm it's still inside
+    # base_dir before returning, so a crafted "../../x" reference can't be
+    # read or rendered.
     resolved_base = base_dir.resolve()
     image_path = (resolved_base / src).resolve()
     if not image_path.is_relative_to(resolved_base) or not image_path.is_file():
@@ -176,6 +193,9 @@ def _resolve_local_image(base_dir: Path, src: str) -> Path | None:
     return image_path
 
 
+# Discovers explicit frame captures created by Adversal under requested_frames/.
+# Path traversal invariant: verifies requested_dir and each child file remain
+# contained within base_dir before returning resolved paths.
 def find_requested_frames(base_dir: Path) -> list[Path]:
     """Return safe image files created by Adversal for explicit timestamps."""
     resolved_base = base_dir.resolve()
@@ -191,6 +211,10 @@ def find_requested_frames(base_dir: Path) -> list[Path]:
     )
 
 
+# Streamlit UI boundary workaround: st.markdown() cannot resolve local relative
+# filesystem image links (e.g. ![alt](frame.png)). This parses markdown image
+# syntax, validates path confinement with _resolve_local_image, and alternates
+# st.markdown() text blocks with native st.image() calls.
 def render_markdown_with_images(markdown_text: str, base_dir: Path) -> None:
     """st.markdown does not resolve local image paths - render each segment explicitly."""
     pos = 0
