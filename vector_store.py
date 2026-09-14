@@ -1,4 +1,10 @@
-"""Persistent Qdrant storage for text and described video-frame evidence."""
+"""Persistent Qdrant storage for text and described video-frame evidence.
+
+Owns the single shared Qdrant collection, keyed and filtered by request_id,
+and all embedding/search calls into it. Must not be queried across videos —
+every read/write here is scoped to one job's request_id. Next: llm.py, which
+owns the embedding call this module wraps.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +25,11 @@ import observability
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+# Every video shares this one collection — isolation per video comes only
+# from the request_id filter in _job_filter below, not a separate
+# collection per video. The embedding model name is baked into the
+# collection name because vector dimensions must match everything already
+# stored in it, so switching EMBED_MODEL means picking a new collection name.
 COLLECTION_NAME = "video_chunks_text_embedding_3_small_v1"
 DEFAULT_STORAGE_PATH = Path("runs") / "qdrant"
 _STORE_LOCK = threading.RLock()
@@ -36,6 +47,9 @@ class SearchHit:
     image_path: str | None = None
 
 
+# Structural (duck-typed) contracts: modes.Chunk and visual_evidence.FrameEvidence
+# satisfy these without inheriting from anything here, keeping this module
+# decoupled from those modules' concrete types.
 class ChunkLike(Protocol):
     heading: str
     text: str
@@ -64,6 +78,11 @@ def get_client(storage_path: str = str(DEFAULT_STORAGE_PATH)) -> QdrantClient:
     """Return the single process-wide client required by persistent local mode."""
     if storage_path == ":memory:":
         return QdrantClient(location=storage_path)
+    # Qdrant's local mode is backed by SQLite, which by default refuses
+    # calls from a thread other than the one that opened it. Streamlit
+    # fragments and reruns call in from different threads, so that check is
+    # disabled here; callers must still take _STORE_LOCK before using the
+    # client.
     return QdrantClient(path=storage_path, force_disable_check_same_thread=True)
 
 
@@ -106,6 +125,9 @@ def _notes_hash(notes: str) -> str:
 
 
 def _point_id(request_id: str, evidence_hash: str, kind: str, index: int) -> str:
+    # Deterministic id from these fields (not a random uuid4) so re-indexing
+    # the same video/evidence/chunk upserts in place instead of duplicating
+    # points.
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{request_id}:{evidence_hash}:{kind}:{index}"))
 
 
@@ -138,6 +160,11 @@ def _index_video(
     expected_points = len(chunks) + len(frames)
     with _STORE_LOCK:
         if active_client.collection_exists(COLLECTION_NAME):
+            # A plain point count is only a trustworthy "already indexed"
+            # signal because the filter below already pins notes_hash and
+            # evidence_hash — a stale count from before the notes or visual
+            # evidence changed can't match this filter, so it falls through
+            # to re-index instead.
             indexed = active_client.count(
                 collection_name=COLLECTION_NAME,
                 count_filter=_job_filter(
@@ -159,6 +186,9 @@ def _index_video(
             for frame in frames
         ]
         texts = [chunk.text for chunk in chunks] + frame_texts
+        # Batch embedding boundary: chunks and frame descriptions are concatenated
+        # and embedded in a single OpenAI API round-trip. Any previous vectors for
+        # this request_id are purged before upserting to prevent orphaned points.
         embeddings = llm.embed(texts)
         if not embeddings or not embeddings[0]:
             msg = "embedding provider returned no vectors"
